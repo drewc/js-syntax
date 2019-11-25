@@ -1,4 +1,6 @@
 (import :drewc/smug)
+(def (abr code) (.char=? (if (integer? code) (integer->char code) code)))
+
 ;; Unicode Format-Control Characters
 (def <ZWNJ> (abr #x200C)) (def <ZWJ> (abr #x200D)) (def <ZWNBSP> (abr #xFEFF))
 ;;  White Space Code Points

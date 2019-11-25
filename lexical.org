@@ -1,13 +1,16 @@
 #+TITLE: Lexps: Lexical parsing JS to Symbolic-Expressions
 
-#+begin_src gerbil :noweb yes :tangle "lexical.ss"
+#+begin_src gerbil :noweb yes :tangle "lexical.ss" 
   (import :drewc/smug)
+  <<abr>>
+
   <<lexical-grammar>>
 #+end_src
 
 
 * Abbreviations 
 
+#+NAME: abr
 #+begin_src gerbil 
   (def (abr code) (.char=? (if (integer? code) (integer->char code) code)))
 #+end_src
