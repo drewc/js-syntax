@@ -1,0 +1,2168 @@
+#+TITLE: Lexps: Lexical parsing JS to Symbolic-Expressions
+
+#+begin_src gerbil :noweb yes :tangle "lexical.ss"
+  (import :drewc/smug)
+  <<lexical-grammar>>
+#+end_src
+
+
+* Abbreviations 
+
+#+begin_src gerbil 
+  (def (abr code) (.char=? (if (integer? code) (integer->char code) code)))
+#+end_src
+
+* ECMAScript Language: Lexical Grammar
+  :PROPERTIES:
+  :CUSTOM_ID: ecmascript-language-lexical-grammar
+  :header-args: :noweb-ref lexical-grammar
+  :END:
+
+The source text of an ECMAScript [[https://tc39.es/ecma262/#prod-Script][Script]] or [[https://tc39.es/ecma262/#prod-Module][Module]] is first converted into a
+sequence of input elements, which are tokens, line terminators, comments, or
+white space. The source text is scanned from left to right, repeatedly taking
+the longest possible sequence of code points as the next input element.
+
+There are several situations where the identification of lexical input
+elements is sensitive to the syntactic grammar context that is consuming
+the input elements. This requires multiple goal symbols for the lexical
+grammar. The
+[[https://tc39.es/ecma262/#prod-InputElementRegExpOrTemplateTail][InputElementRegExpOrTemplateTail]]
+goal is used in syntactic grammar contexts where a
+[[https://tc39.es/ecma262/#prod-RegularExpressionLiteral][RegularExpressionLiteral]],
+a [[https://tc39.es/ecma262/#prod-TemplateMiddle][TemplateMiddle]], or a
+[[https://tc39.es/ecma262/#prod-TemplateTail][TemplateTail]] is
+permitted. The
+[[https://tc39.es/ecma262/#prod-InputElementRegExp][InputElementRegExp]]
+[[https://tc39.es/ecma262/#sec-context-free-grammars][goal symbol]] is
+used in all syntactic grammar contexts where a
+[[https://tc39.es/ecma262/#prod-RegularExpressionLiteral][RegularExpressionLiteral]]
+is permitted but neither a
+[[https://tc39.es/ecma262/#prod-TemplateMiddle][TemplateMiddle]], nor a
+[[https://tc39.es/ecma262/#prod-TemplateTail][TemplateTail]] is
+permitted. The
+[[https://tc39.es/ecma262/#prod-InputElementTemplateTail][InputElementTemplateTail]]
+goal is used in all syntactic grammar contexts where a
+[[https://tc39.es/ecma262/#prod-TemplateMiddle][TemplateMiddle]] or a
+[[https://tc39.es/ecma262/#prod-TemplateTail][TemplateTail]] is
+permitted but a
+[[https://tc39.es/ecma262/#prod-RegularExpressionLiteral][RegularExpressionLiteral]]
+is not permitted. In all other contexts,
+[[https://tc39.es/ecma262/#prod-InputElementDiv][InputElementDiv]] is
+used as the lexical
+[[https://tc39.es/ecma262/#sec-context-free-grammars][goal symbol]].
+
+Note
+
+The use of multiple lexical goals ensures that there are no lexical
+ambiguities that would affect automatic semicolon insertion. For
+example, there are no syntactic grammar contexts where both a leading
+division or division-assignment, and a leading
+[[https://tc39.es/ecma262/#prod-RegularExpressionLiteral][RegularExpressionLiteral]]
+are permitted. This is not affected by semicolon insertion (see
+[[https://tc39.es/ecma262/#sec-automatic-semicolon-insertion][11.9]]);
+in examples such as the following:
+
+#+BEGIN_EXAMPLE
+  a = b
+  /hi/g.exec(c).map(d);
+#+END_EXAMPLE
+
+where the first non-whitespace, non-comment code point after a
+[[LineTerminator][LineTerminator]] is
+U+002F (SOLIDUS) and the syntactic context allows division or
+division-assignment, no semicolon is inserted at the
+[[LineTerminator][LineTerminator]]. That
+is, the above example is interpreted in the same way as:
+
+#+BEGIN_EXAMPLE
+  a = b / hi / g.exec(c).map(d);
+#+END_EXAMPLE
+
+** Syntax
+   :PROPERTIES:
+   :CUSTOM_ID: syntax-2
+   :END:
+#+NAME: InputElementDiv
+#+begin_quote
+[[InputElementDiv][InputElementDiv]]::
+  [[WhiteSpace][WhiteSpace]]
+  [[LineTerminator][LineTerminator]]
+  [[Comment][Comment]]
+  [[CommonToken][CommonToken]]
+  [[DivPunctuator][DivPunctuator]]
+  [[RightBracePunctuator][RightBracePunctuator]]  
+#+end_quote
+#+begin_example 
+#+end_example
+
+
+[[InputElementDiv][InputElementDiv]]::[[WhiteSpace][WhiteSpace]]
+  [[LineTerminator][LineTerminator]]
+  [[Comment][Comment]]
+  [[CommonToken][CommonToken]]
+  [[DivPunctuator][DivPunctuator]]
+  [[RightBracePunctuator][RightBracePunctuator]]  
+
+
+
+[[InputElementRegExp][InputElementRegExp]]::[[WhiteSpace][WhiteSpace]]
+  [[LineTerminator][LineTerminator]]
+  [[Comment][Comment]]
+  [[CommonToken][CommonToken]]
+  [[RightBracePunctuator][RightBracePunctuator]]
+  [[RegularExpressionLiteral][RegularExpressionLiteral]]
+  [[InputElementRegExpOrTemplateTail][InputElementRegExpOrTemplateTail]]::[[WhiteSpace][WhiteSpace]]
+  [[LineTerminator][LineTerminator]]
+  [[Comment][Comment]]
+  [[CommonToken][CommonToken]]
+  [[RegularExpressionLiteral][RegularExpressionLiteral]]
+  [[TemplateSubstitutionTail][TemplateSubstitutionTail]]
+ 
+[[InputElementTemplateTail][InputElementTemplateTail]]::[[WhiteSpace][WhiteSpace]]
+  [[LineTerminator][LineTerminator]]
+  [[Comment][Comment]]
+  [[CommonToken][CommonToken]]
+  [[DivPunctuator][DivPunctuator]]
+  [[TemplateSubstitutionTail][TemplateSubstitutionTail]]
+
+** Unicode Format-Control Characters
+   :PROPERTIES:
+   :CUSTOM_ID: unicode-format-control-characters
+   :END:
+
+ The Unicode format-control characters (i.e., the characters in category
+ “Cf” in the Unicode Character Database such as LEFT-TO-RIGHT MARK or
+ RIGHT-TO-LEFT MARK) are control codes used to control the formatting of
+ a range of text in the absence of higher-level protocols for this (such
+ as mark-up languages).
+
+ It is useful to allow format-control characters in source text to
+ facilitate editing and display. All format control characters may be
+ used within comments, and within string literals, template literals, and
+ regular expression literals.
+
+ U+200C (ZERO WIDTH NON-JOINER) and U+200D (ZERO WIDTH JOINER) are
+ format-control characters that are used to make necessary distinctions when
+ forming words or phrases in certain languages. In ECMAScript source text these
+ code points may also be used in an [[IdentifierName][IdentifierName]] after the first character.
+
+ U+FEFF (ZERO WIDTH NO-BREAK SPACE) is a format-control character used
+ primarily at the start of a text to mark it as Unicode and to allow
+ detection of the text's encoding and byte order. <ZWNBSP> characters
+ intended for this purpose can sometimes also appear after the start of a
+ text, for example as a result of concatenating files. In ECMAScript
+ source text <ZWNBSP> code points are treated as white space characters
+ (see [[https://tc39.es/ecma262/#sec-white-space][11.2]]).
+
+ The special treatment of certain format-control characters outside of
+ comments, string literals, and regular expression literals is summarized
+ in [[Table 33: Format-Control Code Point Usage][Table 33]].
+
+ #+NAME: Table 33: Format-Control Code Point Usage
+ | Code Point | Name                      | Abbreviation | Usage          |
+ |------------+---------------------------+--------------+----------------|
+ | =U+200C=   | ZERO WIDTH NON-JOINER     | <ZWNJ>       | [[IdentifierPart][IdentifierPart]] |
+ | =U+200D=   | ZERO WIDTH JOINER         | <ZWJ>        | [[IdentifierPart][IdentifierPart]] |
+ | =U+FEFF=   | ZERO WIDTH NO-BREAK SPACE | <ZWNBSP>     | [[WhiteSpace][WhiteSpace]]     |
+
+#+begin_src gerbil
+;; Unicode Format-Control Characters
+(def <ZWNJ> (abr #x200C)) (def <ZWJ> (abr #x200D)) (def <ZWNBSP> (abr #xFEFF))
+#+end_src
+
+** White Space
+   :PROPERTIES:
+   :CUSTOM_ID: white-space
+   :END:
+
+ White space code points are used to improve source text readability and to
+ separate tokens (indivisible lexical units) from each other, but are otherwise
+ insignificant. White space code points may occur between any two tokens and at
+ the start or end of input. White space code points may occur within a
+ [[StringLiteral][StringLiteral]], a [[RegularExpressionLiteral][RegularExpressionLiteral]], a [[Template][Template]], or a
+ [[TemplateSubstitutionTail][TemplateSubstitutionTail]] where they are considered significant code points
+ forming part of a literal value. They may also occur within a [[Comment][Comment]], but
+ cannot appear within any other kind of token.
+
+ The ECMAScript white space code points are listed in [[Table 34][Table 34]].
+
+ #+CAPTION: White Space Code Points
+ #+NAME: Table 34 
+ | Code Point            | Name                                             | Abbreviation   |
+ |-----------------------+--------------------------------------------------+----------------|
+ | =U+0009=              | CHARACTER TABULATION                             | <TAB>          |
+ | =U+000B=              | LINE TABULATION                                  | <VT>           |
+ | =U+000C=              | FORM FEED (FF)                                   | <FF>           |
+ | =U+0020=              | SPACE                                            | <SP>           |
+ | =U+00A0=              | NO-BREAK SPACE                                   | <NBSP>         |
+ | =U+FEFF=              | ZERO WIDTH NO-BREAK SPACE                        | <ZWNBSP>       |
+ | Other category “Zs”   | Any other Unicode “Space_Separator” code point   | <USP>          |
+
+
+#+begin_src gerbil
+  ;;  White Space Code Points
+  (def <TAB> (abr #\Tab)) (def <VT> (abr #x000B)) (def <FF> (abr #x000C))
+  (def <SP> (abr #\Space)) (def <NBSP> (arb #x00A0))
+
+  ;; TODO: | Other category “Zs” | Any other Unicode “Space_Separator” code point
+  ;; | <USP> |
+
+#+end_src
+ 
+ ECMAScript implementations must recognize as [[WhiteSpace][WhiteSpace]] code points listed in
+ the “Space_Separator” (“Zs”) category.
+
+ Note
+
+ Other than for the code points listed in [[Table 34][Table 34]], ECMAScript [[WhiteSpace][WhiteSpace]]
+ intentionally excludes all code points that have the Unicode “White_Space”
+ property but which are not classified in category “Space_Separator” (“Zs”).
+
+*** Syntax
+
+ #+NAME: WhiteSpace
+#+begin_quote
+ [[WhiteSpace][WhiteSpace]]:: <TAB> <VT> <FF> <SP> <NBSP> <ZWNBSP> <USP>
+#+end_quote
+
+#+begin_src gerbil
+  (def WhiteSpace (skip (.or <TAB> <VT> <FF> <SP> <NBSP> <ZWNBSP>)))
+
+#+end_src
+
+** Line Terminators
+   :PROPERTIES:
+   :CUSTOM_ID: line-terminators
+   :END:
+
+ Like white space code points, line terminator code points are used to
+ improve source text readability and to separate tokens (indivisible
+ lexical units) from each other. However, unlike white space code points,
+ line terminators have some influence over the behaviour of the syntactic
+ grammar. In general, line terminators may occur between any two tokens,
+ but there are a few places where they are forbidden by the syntactic
+ grammar. Line terminators also affect the process of automatic semicolon
+ insertion
+ ([[https://tc39.es/ecma262/#sec-automatic-semicolon-insertion][11.9]]).
+
+ A line terminator cannot occur within any token except a [[StringLiteral][StringLiteral]],
+ [[Template][Template]], or [[TemplateSubstitutionTail][TemplateSubstitutionTail]]. <LF> and <CR> line terminators cannot
+ occur within a [[StringLiteral][StringLiteral]] token except as part of a [[LineContinuation][LineContinuation]].
+
+ A line terminator can occur within a [[MultiLineComment][MultiLineComment]] but cannot occur within a
+ [[SingleLineComment][SingleLineComment]].
+
+ Line terminators are included in the set of white space code points that are
+ matched by the =\s= class in regular expressions.
+
+ The ECMAScript line terminator code points are listed in [[https://tc39.es/ecma262/#table-33][Table 35]].
+ 
+ #+CAPTION: Table 35: Line Terminator Code Points 
+ #+NAME: Table 35
+ | Code Point   | Unicode Name           | Abbreviation   |
+ |--------------+------------------------+----------------|
+ | =U+000A=     | LINE FEED (LF)         | <LF>           |
+ | =U+000D=     | CARRIAGE RETURN (CR)   | <CR>           |
+ | =U+2028=     | LINE SEPARATOR         | <LS>           |
+ | =U+2029=     | PARAGRAPH SEPARATOR    | <PS>           |
+
+#+begin_src gerbil
+;; Line Terminator Code Points 
+(def <LF> (abr #x000A)) (def <CR> (abr #x000D)) 
+(def <LS> (abr #x2028)) (def <PS> (abr #2029))
+#+end_src
+
+ Only the Unicode code points in [[Table 35][Table 35]] are treated as line terminators. Other
+ new line or line breaking Unicode code points are not treated as line
+ terminators but are treated as white space if they meet the requirements listed
+ in [[Table 34][Table 34]]. The sequence ~<CR><LF>~ is commonly used as a line terminator. It
+ should be considered a single [[SourceCharacter][SourceCharacter]] for the purpose of reporting line
+ numbers.
+
+*** Syntax
+    :PROPERTIES:
+    :CUSTOM_ID: syntax-4
+    :END:
+#+begin_src gerbil
+#+end_src
+
+ [[LineTerminator][LineTerminator]]::<LF>
+ <CR> <LS> <PS>
+
+
+ [[LineTerminatorSequence][LineTerminatorSequence]]::<LF>
+ <CR>[lookahead ≠ <LF>] <LS> <PS> <CR><LF>
+** Comments
+   :PROPERTIES:
+   :CUSTOM_ID: comments
+   :END:
+
+ Comments can be either single or multi-line. Multi-line comments cannot
+ nest.
+
+ Because a single-line comment can contain any Unicode code point except
+ a [[LineTerminator][LineTerminator]] code
+ point, and because of the general rule that a token is always as long as
+ possible, a single-line comment always consists of all code points from
+ the =//= marker to the end of the line. However, the
+ [[LineTerminator][LineTerminator]] at the
+ end of the line is not considered to be part of the single-line comment;
+ it is recognized separately by the lexical grammar and becomes part of
+ the stream of input elements for the syntactic grammar. This point is
+ very important, because it implies that the presence or absence of
+ single-line comments does not affect the process of automatic semicolon
+ insertion (see
+ [[https://tc39.es/ecma262/#sec-automatic-semicolon-insertion][11.9]]).
+
+ Comments behave like white space and are discarded except that, if a
+ [[MultiLineComment][MultiLineComment]]
+ contains a line terminator code point, then the entire comment is
+ considered to be a
+ [[LineTerminator][LineTerminator]] for
+ purposes of parsing by the syntactic grammar.
+
+*** Syntax
+    :PROPERTIES:
+    :CUSTOM_ID: syntax-5
+    :END:
+
+ [[Comment][Comment]]::[[MultiLineComment][MultiLineComment]]
+ [[SingleLineComment][SingleLineComment]]
+ [[MultiLineComment][MultiLineComment]]::/*[[MultiLineCommentChars][MultiLineCommentChars]]opt*/
+ [[MultiLineCommentChars][MultiLineCommentChars]]::[[MultiLineNotAsteriskChar][MultiLineNotAsteriskChar]][[MultiLineCommentChars][MultiLineCommentChars]]opt
+ *[[PostAsteriskCommentChars][PostAsteriskCommentChars]]opt
+ [[PostAsteriskCommentChars][PostAsteriskCommentChars]]::[[MultiLineNotForwardSlashOrAsteriskChar][MultiLineNotForwardSlashOrAsteriskChar]][[MultiLineCommentChars][MultiLineCommentChars]]opt
+ *[[PostAsteriskCommentChars][PostAsteriskCommentChars]]opt
+ [[MultiLineNotAsteriskChar][MultiLineNotAsteriskChar]]::[[SourceCharacter][SourceCharacter]]but
+ not *
+ [[MultiLineNotForwardSlashOrAsteriskChar][MultiLineNotForwardSlashOrAsteriskChar]]::[[SourceCharacter][SourceCharacter]]but
+ not one of / or *
+ [[SingleLineComment][SingleLineComment]]:://[[SingleLineCommentChars][SingleLineCommentChars]]opt
+ [[SingleLineCommentChars][SingleLineCommentChars]]::[[SingleLineCommentChar][SingleLineCommentChar]][[SingleLineCommentChars][SingleLineCommentChars]]opt
+ [[SingleLineCommentChar][SingleLineCommentChar]]::[[SourceCharacter][SourceCharacter]]but
+ not [[LineTerminator][LineTerminator]]
+** Tokens
+   :PROPERTIES:
+   :CUSTOM_ID: tokens
+   :END:
+
+*** Syntax
+    :PROPERTIES:
+    :CUSTOM_ID: syntax-6
+    :END:
+
+ [[CommonToken][CommonToken]]::[[IdentifierName][IdentifierName]]
+ [[Punctuator][Punctuator]]
+ [[NumericLiteral][NumericLiteral]]
+ [[StringLiteral][StringLiteral]]
+ [[Template][Template]] Note
+
+ The [[DivPunctuator][DivPunctuator]],
+ [[RegularExpressionLiteral][RegularExpressionLiteral]],
+ [[RightBracePunctuator][RightBracePunctuator]],
+ and
+ [[TemplateSubstitutionTail][TemplateSubstitutionTail]]
+ productions derive additional tokens that are not included in the
+ [[CommonToken][CommonToken]] production.
+
+** Names and Keywords
+   :PROPERTIES:
+   :CUSTOM_ID: names-and-keywords
+   :END:
+
+ [[IdentifierName][IdentifierName]] and
+ [[ReservedWord][ReservedWord]] are tokens
+ that are interpreted according to the Default Identifier Syntax given in
+ Unicode Standard Annex #31, Identifier and Pattern Syntax, with some
+ small modifications.
+ [[ReservedWord][ReservedWord]] is an
+ enumerated subset of
+ [[IdentifierName][IdentifierName]]. The
+ syntactic grammar defines
+ [[Identifier][Identifier]] as an
+ [[IdentifierName][IdentifierName]] that is
+ not a [[ReservedWord][ReservedWord]]. The
+ Unicode identifier grammar is based on character properties specified by
+ the Unicode Standard. The Unicode code points in the specified
+ categories in the latest version of the Unicode standard must be treated
+ as in those categories by all conforming ECMAScript implementations.
+ ECMAScript implementations may recognize identifier code points defined
+ in later editions of the Unicode Standard.
+
+ Note 1
+
+ This standard specifies specific code point additions: U+0024 (DOLLAR
+ SIGN) and U+005F (LOW LINE) are permitted anywhere in an
+ [[IdentifierName][IdentifierName]], and
+ the code points U+200C (ZERO WIDTH NON-JOINER) and U+200D (ZERO WIDTH
+ JOINER) are permitted anywhere after the first code point of an
+ [[IdentifierName][IdentifierName]].
+
+ Unicode escape sequences are permitted in an
+ [[IdentifierName][IdentifierName]], where
+ they contribute a single Unicode code point to the
+ [[IdentifierName][IdentifierName]]. The
+ code point is expressed by the
+ [[CodePoint][CodePoint]] of the
+ [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ (see [[https://tc39.es/ecma262/#sec-literals-string-literals][11.8.4]]).
+ The =\= preceding the
+ [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ and the =u= and ={ }= code units, if they appear, do not contribute code
+ points to the
+ [[IdentifierName][IdentifierName]]. A
+ [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ cannot be used to put a code point into an
+ [[IdentifierName][IdentifierName]] that
+ would otherwise be illegal. In other words, if a =\=
+ [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ sequence were replaced by the
+ [[SourceCharacter][SourceCharacter]] it
+ contributes, the result must still be a valid
+ [[IdentifierName][IdentifierName]] that
+ has the exact same sequence of
+ [[SourceCharacter][SourceCharacter]]
+ elements as the original
+ [[IdentifierName][IdentifierName]]. All
+ interpretations of
+ [[IdentifierName][IdentifierName]] within
+ this specification are based upon their actual code points regardless of
+ whether or not an escape sequence was used to contribute any particular
+ code point.
+
+ Two [[IdentifierName][IdentifierName]]s
+ that are canonically equivalent according to the Unicode standard are
+ /not/ equal unless, after replacement of each
+ [[UnicodeEscapeSequence][UnicodeEscapeSequence]],
+ they are represented by the exact same sequence of code points.
+
+*** Syntax
+    :PROPERTIES:
+    :CUSTOM_ID: syntax-7
+    :END:
+
+ [[IdentifierName][IdentifierName]]::[[IdentifierStart][IdentifierStart]]
+ [[IdentifierName][IdentifierName]][[IdentifierPart][IdentifierPart]]
+ [[IdentifierStart][IdentifierStart]]::[[UnicodeIDStart][UnicodeIDStart]]
+ $ _
+ \[[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ [[IdentifierPart][IdentifierPart]]::[[UnicodeIDContinue][UnicodeIDContinue]]
+ $
+ \[[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ <ZWNJ> <ZWJ>
+ [[UnicodeIDStart][UnicodeIDStart]]::any
+ Unicode code point with the Unicode property “ID_Start”
+ [[UnicodeIDContinue][UnicodeIDContinue]]::any
+ Unicode code point with the Unicode property “ID_Continue”
+ The definitions of the nonterminal
+ [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+ is given in
+ [[https://tc39.es/ecma262/#sec-literals-string-literals][11.8.4]].
+
+ Note 2
+
+ The nonterminal
+ [[IdentifierPart][IdentifierPart]] derives
+ =_= via
+ [[UnicodeIDContinue][UnicodeIDContinue]].
+
+ Note 3
+
+ The sets of code points with Unicode properties “ID_Start” and
+ “ID_Continue” include, respectively, the code points with Unicode
+ properties “Other_ID_Start” and “Other_ID_Continue”.
+
+*** Identifier Names
+    :PROPERTIES:
+    :CUSTOM_ID: identifier-names
+    :END:
+
+**** 11.6.1.1Static Semantics: Early Errors
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-early-errors
+     :END:
+
+   [[IdentifierStart][IdentifierStart]]::\[[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+
+   - It is a Syntax Error if
+     SV([[UnicodeEscapeSequence][UnicodeEscapeSequence]])
+     is none of "$", or "_", or the
+     [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of a
+     code point matched by the
+     [[UnicodeIDStart][UnicodeIDStart]]
+     lexical grammar production.
+
+   [[IdentifierPart][IdentifierPart]]::\[[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+
+   - It is a Syntax Error if
+     SV([[UnicodeEscapeSequence][UnicodeEscapeSequence]])
+     is none of "$", or "_", or the
+     [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of
+     either <ZWNJ> or <ZWJ>, or the
+     [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of a
+     Unicode code point that would be matched by the
+     [[UnicodeIDContinue][UnicodeIDContinue]]
+     lexical grammar production.
+
+**** 11.6.1.2Static Semantics: StringValue
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-stringvalue
+     :END:
+
+   [[IdentifierName][IdentifierName]]::[[IdentifierStart][IdentifierStart]]
+   [[IdentifierName][IdentifierName]][[IdentifierPart][IdentifierPart]]
+
+   1. Return the String value consisting of the sequence of code units
+      corresponding to
+      [[IdentifierName][IdentifierName]]. In
+      determining the sequence any occurrences of =\=
+      [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+      are first replaced with the code point represented by the
+      [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+      and then the code points of the entire
+      [[IdentifierName][IdentifierName]] are
+      converted to code units by
+      [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] each
+      code point.
+
+   <<sec-future-reserved-words>><<sec-keywords>><<sec-reserved-words>>
+*** Keywords and Reserved Words
+    :PROPERTIES:
+    :CUSTOM_ID: keywords-and-reserved-words
+    :END:
+
+  A keyword is a token that matches
+  [[IdentifierName][IdentifierName]], but
+  also has a syntactic use; that is, it appears literally, in a
+  =fixed width= font, in some syntactic production. The keywords of
+  ECMAScript include =if=, =while=, =async=, =await=, and many others.
+
+  A reserved word is an
+  [[IdentifierName][IdentifierName]] that
+  cannot be used as an identifier. Many keywords are reserved words, but
+  some are not, and some are reserved only in certain contexts. =if= and
+  =while= are reserved words. =await= is reserved only inside async
+  functions and modules. =async= is not reserved; it can be used as a
+  variable name or statement label without restriction.
+
+  This specification uses a combination of grammatical productions and
+  [[https://tc39.es/ecma262/#early-error][early error]] rules to specify
+  which names are valid identifiers and which are reserved words. All
+  tokens in the
+  [[ReservedWord][ReservedWord]] list below,
+  except for =await= and =yield=, are unconditionally reserved. Exceptions
+  for =await= and =yield= are specified in
+  [[https://tc39.es/ecma262/#sec-identifiers][12.1]], using parameterized
+  syntactic productions. Lastly, several
+  [[https://tc39.es/ecma262/#early-error][early error]] rules restrict the
+  set of valid identifiers. See
+  [[https://tc39.es/ecma262/#sec-identifiers-static-semantics-early-errors][12.1.1]],
+  [[https://tc39.es/ecma262/#sec-let-and-const-declarations-static-semantics-early-errors][13.3.1.1]],
+  [[https://tc39.es/ecma262/#sec-for-in-and-for-of-statements-static-semantics-early-errors][13.7.5.1]],
+  and
+  [[https://tc39.es/ecma262/#sec-class-definitions-static-semantics-early-errors][14.6.1]].
+  In summary, there are five categories of identifier names:
+
+  - Those that are always allowed as identifiers, and are not keywords,
+    such as =Math=, =window=, =toString=, and =_=;
+
+  - Those that are never allowed as identifiers, namely the
+    [[ReservedWord][ReservedWord]]s listed
+    below except =await= and =yield=;
+
+  - Those that are contextually allowed as identifiers, namely =await= and
+    =yield=;
+
+  - Those that are contextually disallowed as identifiers, in
+    [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]]:
+    =let=, =static=, =implements=, =interface=, =package=, =private=,
+    =protected=, and =public=;
+
+  - Those that are always allowed as identifiers, but also appear as
+    keywords within certain syntactic productions, at places where
+    [[Identifier][Identifier]] is not
+    allowed: =as=, =async=, =from=, =get=, =of=, =set=, and =target=.
+
+  The term conditional keyword, or contextual keyword, is sometimes used
+  to refer to the keywords that fall in the last three categories, and
+  thus can be used as identifiers in some contexts and as keywords in
+  others.
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-8
+     :END:
+
+  [[ReservedWord][ReservedWord]]::one
+  ofawaitbreakcasecatchclassconstcontinuedebuggerdefaultdeletedoelseenumexportextendsfalsefinallyforfunctionifimportininstanceofnewnullreturnsuperswitchthisthrowtruetrytypeofvarvoidwhilewithyield
+  Note 1
+
+  Per [[https://tc39.es/ecma262/#sec-grammar-notation][5.1.5]], keywords
+  in the grammar match literal sequences of specific
+  [[SourceCharacter][SourceCharacter]]
+  elements. A code point in a keyword cannot be expressed by a =\=
+  [[UnicodeEscapeSequence][UnicodeEscapeSequence]].
+
+  An [[IdentifierName][IdentifierName]] can
+  contain =\=
+  [[UnicodeEscapeSequence][UnicodeEscapeSequence]]s,
+  but it is not possible to declare a variable named "else" by spelling it
+  =els\u{65}=. The [[https://tc39.es/ecma262/#early-error][early error]]
+  rules in
+  [[https://tc39.es/ecma262/#sec-identifiers-static-semantics-early-errors][12.1.1]]
+  rule out identifiers with the same StringValue as a reserved word.
+
+  Note 2
+
+  =enum= is not currently used as a keyword in this specification. It is a
+  /future reserved word/, set aside for use as a keyword in future
+  language extensions.
+
+  Similarly, =implements=, =interface=, =package=, =private=, =protected=,
+  and =public= are future reserved words in
+  [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]].
+
+  Note 3
+
+  The names =arguments= and =eval= are not keywords, but they are subject
+  to some restrictions in
+  [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]]. See
+  [[https://tc39.es/ecma262/#sec-identifiers-static-semantics-early-errors][12.1.1]],
+  [[https://tc39.es/ecma262/#sec-identifiers-static-semantics-assignmenttargettype][12.1.3]],
+  [[https://tc39.es/ecma262/#sec-function-definitions-static-semantics-early-errors][14.1.2]],
+  [[https://tc39.es/ecma262/#sec-generator-function-definitions-static-semantics-early-errors][14.4.1]],
+  [[https://tc39.es/ecma262/#sec-async-generator-function-definitions-static-semantics-early-errors][14.5.1]],
+  and
+  [[https://tc39.es/ecma262/#sec-async-function-definitions-static-semantics-early-errors][14.7.1]].
+
+** Punctuators
+   :PROPERTIES:
+   :CUSTOM_ID: punctuators
+   :END:
+
+*** Syntax
+    :PROPERTIES:
+    :CUSTOM_ID: syntax-9
+    :END:
+
+ [[Punctuator][Punctuator]]::one
+ of{()[]....;,<><=>===!====!==+-*%**++--<<>>>>>&|^!~&&||?:=+=-=*=%=**=<<=>>=>>>=&=|=^==>
+ [[DivPunctuator][DivPunctuator]]::/ /=
+ [[RightBracePunctuator][RightBracePunctuator]]::}
+** Literals
+   :PROPERTIES:
+   :CUSTOM_ID: literals
+   :END:
+
+*** Null Literals
+    :PROPERTIES:
+    :CUSTOM_ID: null-literals
+    :END:
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-10
+     :END:
+
+  [[NullLiteral][NullLiteral]]::null
+*** Boolean Literals
+    :PROPERTIES:
+    :CUSTOM_ID: boolean-literals
+    :END:
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-11
+     :END:
+
+  [[BooleanLiteral][BooleanLiteral]]::true
+  false
+*** Numeric Literals
+    :PROPERTIES:
+    :CUSTOM_ID: numeric-literals
+    :END:
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-12
+     :END:
+
+  [[NumericLiteral][NumericLiteral]]::[[DecimalLiteral][DecimalLiteral]]
+  [[DecimalBigIntegerLiteral][DecimalBigIntegerLiteral]]
+  [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]
+  [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]][[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+  [[DecimalBigIntegerLiteral][DecimalBigIntegerLiteral]]::0[[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+  [[NonZeroDigit][NonZeroDigit]][[DecimalDigits][DecimalDigits]]opt[[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+  [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]::[[BinaryIntegerLiteral][BinaryIntegerLiteral]]
+  [[OctalIntegerLiteral][OctalIntegerLiteral]]
+  [[HexIntegerLiteral][HexIntegerLiteral]]
+  [[BigIntLiteralSuffix][BigIntLiteralSuffix]]::n
+  [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]].[[DecimalDigits][DecimalDigits]]opt[[ExponentPart][ExponentPart]]opt
+  .[[DecimalDigits][DecimalDigits]][[ExponentPart][ExponentPart]]opt
+  [[DecimalIntegerLiteral][DecimalIntegerLiteral]][[ExponentPart][ExponentPart]]opt
+  [[DecimalIntegerLiteral][DecimalIntegerLiteral]]::0
+  [[NonZeroDigit][NonZeroDigit]][[DecimalDigits][DecimalDigits]]opt
+  [[DecimalDigits][DecimalDigits]]::[[DecimalDigit][DecimalDigit]]
+  [[DecimalDigits][DecimalDigits]][[DecimalDigit][DecimalDigit]]
+  [[DecimalDigit][DecimalDigit]]::one
+  of0123456789
+  [[NonZeroDigit][NonZeroDigit]]::one
+  of123456789
+  [[ExponentPart][ExponentPart]]::[[ExponentIndicator][ExponentIndicator]][[SignedInteger][SignedInteger]]
+  [[ExponentIndicator][ExponentIndicator]]::one
+  ofeE
+  [[SignedInteger][SignedInteger]]::[[DecimalDigits][DecimalDigits]]
+  +[[DecimalDigits][DecimalDigits]] -[[DecimalDigits][DecimalDigits]]
+  [[BinaryIntegerLiteral][BinaryIntegerLiteral]]::0b[[BinaryDigits][BinaryDigits]]
+  0B[[BinaryDigits][BinaryDigits]]
+  [[BinaryDigits][BinaryDigits]]::[[BinaryDigit][BinaryDigit]]
+  [[BinaryDigits][BinaryDigits]][[BinaryDigit][BinaryDigit]]
+  [[BinaryDigit][BinaryDigit]]::one of01
+  [[OctalIntegerLiteral][OctalIntegerLiteral]]::0o[[OctalDigits][OctalDigits]]
+  0O[[OctalDigits][OctalDigits]]
+  [[OctalDigits][OctalDigits]]::[[OctalDigit][OctalDigit]]
+  [[OctalDigits][OctalDigits]][[OctalDigit][OctalDigit]]
+  [[OctalDigit][OctalDigit]]::one of01234567
+  [[HexIntegerLiteral][HexIntegerLiteral]]::0x[[HexDigits][HexDigits]]
+  0X[[HexDigits][HexDigits]]
+  [[HexDigits][HexDigits]]::[[HexDigit][HexDigit]]
+  [[HexDigits][HexDigits]][[HexDigit][HexDigit]]
+  [[HexDigit][HexDigit]]::one
+  of0123456789abcdefABCDEF
+  The [[SourceCharacter][SourceCharacter]]
+  immediately following a
+  [[NumericLiteral][NumericLiteral]] must
+  not be an
+  [[IdentifierStart][IdentifierStart]] or
+  [[DecimalDigit][DecimalDigit]].
+
+  Note
+
+  For example: =3in= is an error and not the two input elements =3= and
+  =in=.
+
+  A conforming implementation, when processing
+  [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]],
+  must not extend, as described in
+  [[https://tc39.es/ecma262/#sec-additional-syntax-numeric-literals][B.1.1]],
+  the syntax of
+  [[NumericLiteral][NumericLiteral]] to
+  include
+  [[annexB-LegacyOctalIntegerLiteral][LegacyOctalIntegerLiteral]],
+  nor extend the syntax of
+  [[DecimalIntegerLiteral][DecimalIntegerLiteral]]
+  to include
+  [[annexB-NonOctalDecimalIntegerLiteral][NonOctalDecimalIntegerLiteral]].
+
+**** Static Semantics: MV
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-mv
+     :END:
+
+   A numeric literal stands for a value of the Number type or the BigInt
+   type.
+
+   - The MV of
+     [[NumericLiteral][NumericLiteral]]::[[DecimalLiteral][DecimalLiteral]]
+     is the MV of
+     [[DecimalLiteral][DecimalLiteral]].
+   - The MV of
+     [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]::[[BinaryIntegerLiteral][BinaryIntegerLiteral]]
+     is the MV of
+     [[BinaryIntegerLiteral][BinaryIntegerLiteral]].
+   - The MV of
+     [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]::[[OctalIntegerLiteral][OctalIntegerLiteral]]
+     is the MV of
+     [[OctalIntegerLiteral][OctalIntegerLiteral]].
+   - The MV of
+     [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]::[[HexIntegerLiteral][HexIntegerLiteral]]
+     is the MV of
+     [[HexIntegerLiteral][HexIntegerLiteral]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]].
+     is the MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]].[[DecimalDigits][DecimalDigits]]
+     is the MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]
+     plus (the MV of
+     [[DecimalDigits][DecimalDigits]] ×
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{-_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}=n=}),
+     where =n= is the
+     [[https://tc39.es/ecma262/#mathematical-value][mathematical value]] of
+     the number of code points in
+     [[DecimalDigits][DecimalDigits]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]].[[ExponentPart][ExponentPart]]
+     is the MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]
+     × 10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{=e=}, where =e= is
+     the MV of
+     [[ExponentPart][ExponentPart]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]].[[DecimalDigits][DecimalDigits]][[ExponentPart][ExponentPart]]
+     is (the MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]
+     plus (the MV of
+     [[DecimalDigits][DecimalDigits]] ×
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{-_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}=n=}))
+     × 10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{=e=}, where =n= is
+     the [[https://tc39.es/ecma262/#mathematical%20integer][mathematical
+     integer]] number of code points in
+     [[DecimalDigits][DecimalDigits]] and =e=
+     is the MV of
+     [[ExponentPart][ExponentPart]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::.[[DecimalDigits][DecimalDigits]]
+     is the MV of
+     [[DecimalDigits][DecimalDigits]] ×
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{-_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}=n=},
+     where =n= is the
+     [[https://tc39.es/ecma262/#mathematical%20integer][mathematical
+     integer]] number of code points in
+     [[DecimalDigits][DecimalDigits]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::.[[DecimalDigits][DecimalDigits]][[ExponentPart][ExponentPart]]
+     is the MV of
+     [[DecimalDigits][DecimalDigits]] ×
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{=e= -_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}
+     =n=}, where =n= is the
+     [[https://tc39.es/ecma262/#mathematical%20integer][mathematical
+     integer]] number of code points in
+     [[DecimalDigits][DecimalDigits]] and =e=
+     is the MV of
+     [[ExponentPart][ExponentPart]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]]
+     is the MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]].
+   - The MV of
+     [[DecimalLiteral][DecimalLiteral]]::[[DecimalIntegerLiteral][DecimalIntegerLiteral]][[ExponentPart][ExponentPart]]
+     is the MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]
+     × 10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{=e=}, where =e= is
+     the MV of
+     [[ExponentPart][ExponentPart]].
+   - The MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]::0
+     is 0_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]::[[NonZeroDigit][NonZeroDigit]]
+     is the MV of
+     [[NonZeroDigit][NonZeroDigit]].
+   - The MV of
+     [[DecimalIntegerLiteral][DecimalIntegerLiteral]]::[[NonZeroDigit][NonZeroDigit]][[DecimalDigits][DecimalDigits]]
+     is (the MV of
+     [[NonZeroDigit][NonZeroDigit]] ×
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{=n=}) plus the MV of
+     [[DecimalDigits][DecimalDigits]], where
+     =n= is the
+     [[https://tc39.es/ecma262/#mathematical%20integer][mathematical
+     integer]] number of code points in
+     [[DecimalDigits][DecimalDigits]].
+   - The MV of
+     [[DecimalDigits][DecimalDigits]]::[[DecimalDigit][DecimalDigit]]
+     is the MV of
+     [[DecimalDigit][DecimalDigit]].
+   - The MV of
+     [[DecimalDigits][DecimalDigits]]::[[DecimalDigits][DecimalDigits]][[DecimalDigit][DecimalDigit]]
+     is (the MV of
+     [[DecimalDigits][DecimalDigits]] ×
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}) plus the MV of
+     [[DecimalDigit][DecimalDigit]].
+   - The MV of
+     [[ExponentPart][ExponentPart]]::[[ExponentIndicator][ExponentIndicator]][[SignedInteger][SignedInteger]]
+     is the MV of
+     [[SignedInteger][SignedInteger]].
+   - The MV of
+     [[SignedInteger][SignedInteger]]::[[DecimalDigits][DecimalDigits]]
+     is the MV of
+     [[DecimalDigits][DecimalDigits]].
+   - The MV of
+     [[SignedInteger][SignedInteger]]::+[[DecimalDigits][DecimalDigits]]
+     is the MV of
+     [[DecimalDigits][DecimalDigits]].
+   - The MV of
+     [[SignedInteger][SignedInteger]]::-[[DecimalDigits][DecimalDigits]]
+     is the negative of the MV of
+     [[DecimalDigits][DecimalDigits]].
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::0 or of
+     [[HexDigit][HexDigit]]::0 or of
+     [[OctalDigit][OctalDigit]]::0 or of
+     [[BinaryDigit][BinaryDigit]]::0 is
+     0_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::1 or of
+     [[NonZeroDigit][NonZeroDigit]]::1 or of
+     [[HexDigit][HexDigit]]::1 or of
+     [[OctalDigit][OctalDigit]]::1 or of
+     [[BinaryDigit][BinaryDigit]]::1 is
+     1_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::2 or of
+     [[NonZeroDigit][NonZeroDigit]]::2 or of
+     [[HexDigit][HexDigit]]::2 or of
+     [[OctalDigit][OctalDigit]]::2 is
+     2_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::3 or of
+     [[NonZeroDigit][NonZeroDigit]]::3 or of
+     [[HexDigit][HexDigit]]::3 or of
+     [[OctalDigit][OctalDigit]]::3 is
+     3_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::4 or of
+     [[NonZeroDigit][NonZeroDigit]]::4 or of
+     [[HexDigit][HexDigit]]::4 or of
+     [[OctalDigit][OctalDigit]]::4 is
+     4_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::5 or of
+     [[NonZeroDigit][NonZeroDigit]]::5 or of
+     [[HexDigit][HexDigit]]::5 or of
+     [[OctalDigit][OctalDigit]]::5 is
+     5_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::6 or of
+     [[NonZeroDigit][NonZeroDigit]]::6 or of
+     [[HexDigit][HexDigit]]::6 or of
+     [[OctalDigit][OctalDigit]]::6 is
+     6_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::7 or of
+     [[NonZeroDigit][NonZeroDigit]]::7 or of
+     [[HexDigit][HexDigit]]::7 or of
+     [[OctalDigit][OctalDigit]]::7 is
+     7_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::8 or of
+     [[NonZeroDigit][NonZeroDigit]]::8 or of
+     [[HexDigit][HexDigit]]::8 is
+     8_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[DecimalDigit][DecimalDigit]]::9 or of
+     [[NonZeroDigit][NonZeroDigit]]::9 or of
+     [[HexDigit][HexDigit]]::9 is
+     9_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of [[HexDigit][HexDigit]]::a or
+     of [[HexDigit][HexDigit]]::A is
+     10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of [[HexDigit][HexDigit]]::b or
+     of [[HexDigit][HexDigit]]::B is
+     11_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of [[HexDigit][HexDigit]]::c or
+     of [[HexDigit][HexDigit]]::C is
+     12_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of [[HexDigit][HexDigit]]::d or
+     of [[HexDigit][HexDigit]]::D is
+     13_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of [[HexDigit][HexDigit]]::e or
+     of [[HexDigit][HexDigit]]::E is
+     14_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of [[HexDigit][HexDigit]]::f or
+     of [[HexDigit][HexDigit]]::F is
+     15_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+   - The MV of
+     [[BinaryIntegerLiteral][BinaryIntegerLiteral]]::0b[[BinaryDigits][BinaryDigits]]
+     is the MV of
+     [[BinaryDigits][BinaryDigits]].
+   - The MV of
+     [[BinaryIntegerLiteral][BinaryIntegerLiteral]]::0B[[BinaryDigits][BinaryDigits]]
+     is the MV of
+     [[BinaryDigits][BinaryDigits]].
+   - The MV of
+     [[BinaryDigits][BinaryDigits]]::[[BinaryDigit][BinaryDigit]]
+     is the MV of
+     [[BinaryDigit][BinaryDigit]].
+   - The MV of
+     [[BinaryDigits][BinaryDigits]]::[[BinaryDigits][BinaryDigits]][[BinaryDigit][BinaryDigit]]
+     is (the MV of
+     [[BinaryDigits][BinaryDigits]] ×
+     2_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}) plus the MV of
+     [[BinaryDigit][BinaryDigit]].
+   - The MV of
+     [[OctalIntegerLiteral][OctalIntegerLiteral]]::0o[[OctalDigits][OctalDigits]]
+     is the MV of
+     [[OctalDigits][OctalDigits]].
+   - The MV of
+     [[OctalIntegerLiteral][OctalIntegerLiteral]]::0O[[OctalDigits][OctalDigits]]
+     is the MV of
+     [[OctalDigits][OctalDigits]].
+   - The MV of
+     [[OctalDigits][OctalDigits]]::[[OctalDigit][OctalDigit]]
+     is the MV of [[OctalDigit][OctalDigit]].
+   - The MV of
+     [[OctalDigits][OctalDigits]]::[[OctalDigits][OctalDigits]][[OctalDigit][OctalDigit]]
+     is (the MV of
+     [[OctalDigits][OctalDigits]] ×
+     8_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}) plus the MV of
+     [[OctalDigit][OctalDigit]].
+   - The MV of
+     [[HexIntegerLiteral][HexIntegerLiteral]]::0x[[HexDigits][HexDigits]]
+     is the MV of [[HexDigits][HexDigits]].
+   - The MV of
+     [[HexIntegerLiteral][HexIntegerLiteral]]::0X[[HexDigits][HexDigits]]
+     is the MV of [[HexDigits][HexDigits]].
+   - The MV of
+     [[HexDigits][HexDigits]]::[[HexDigit][HexDigit]]
+     is the MV of [[HexDigit][HexDigit]].
+   - The MV of
+     [[HexDigits][HexDigits]]::[[HexDigits][HexDigits]][[HexDigit][HexDigit]]
+     is (the MV of [[HexDigits][HexDigits]] ×
+     16_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}) plus the MV of
+     [[HexDigit][HexDigit]].
+
+**** Static Semantics: NumericValue
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-numericvalue
+     :END:
+
+   [[NumericLiteral][NumericLiteral]]::[[DecimalLiteral][DecimalLiteral]]
+
+   1. Return the [[https://tc39.es/ecma262/#number-value][Number value]]
+      that results from rounding the MV of
+      [[DecimalLiteral][DecimalLiteral]] as
+      described below.
+
+   [[NumericLiteral][NumericLiteral]]::[[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]
+
+   1. Return the [[https://tc39.es/ecma262/#number-value][Number value]]
+      that results from rounding the MV of
+      [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]]
+      as described below.
+
+   Once the exact MV for a numeric literal has been determined, it is then
+   rounded to a value of the Number type. If the MV is
+   0_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}, then the rounded value is
+   +0; otherwise, the rounded value must be the
+   [[https://tc39.es/ecma262/#number-value][Number value]] for the MV (as
+   specified in
+   [[https://tc39.es/ecma262/#sec-ecmascript-language-types-number-type][6.1.6.1]]),
+   unless the literal is a
+   [[DecimalLiteral][DecimalLiteral]] and the
+   literal has more than 20 significant digits, in which case the
+   [[https://tc39.es/ecma262/#number-value][Number value]] may be either
+   the [[https://tc39.es/ecma262/#number-value][Number value]] for the MV
+   of a literal produced by replacing each significant digit after the 20th
+   with a =0= digit or the [[https://tc39.es/ecma262/#number-value][Number
+   value]] for the MV of a literal produced by replacing each significant
+   digit after the 20th with a =0= digit and then incrementing the literal
+   at the 20th significant digit position. A digit is /significant/ if it
+   is not part of an
+   [[ExponentPart][ExponentPart]] and
+
+   - it is not =0=; or
+   - there is a nonzero digit to its left and there is a nonzero digit, not
+     in the [[ExponentPart][ExponentPart]],
+     to its right.
+
+   [[NumericLiteral][NumericLiteral]]::[[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]][[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+
+   1. Return the BigInt value that represents the MV of
+      [[NonDecimalIntegerLiteral][NonDecimalIntegerLiteral]].
+
+   [[DecimalBigIntegerLiteral][DecimalBigIntegerLiteral]]::0[[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+
+   1. Return the BigInt value that represents
+      0_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}.
+
+   [[DecimalBigIntegerLiteral][DecimalBigIntegerLiteral]]::[[NonZeroDigit][NonZeroDigit]][[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+
+   1. Return the BigInt value that represents the MV of
+      [[NonZeroDigit][NonZeroDigit]].
+
+   [[DecimalBigIntegerLiteral][DecimalBigIntegerLiteral]]::[[NonZeroDigit][NonZeroDigit]][[DecimalDigits][DecimalDigits]][[BigIntLiteralSuffix][BigIntLiteralSuffix]]
+
+   1. Let =n= be the
+      [[https://tc39.es/ecma262/#mathematical%20integer][mathematical
+      integer]] number of code points in
+      [[DecimalDigits][DecimalDigits]].
+   2. Let =mv= be (the MV of
+      [[NonZeroDigit][NonZeroDigit]] ×
+      10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]}^{=n=}) plus the MV of
+      [[DecimalDigits][DecimalDigits]].
+   3. Return the BigInt value that represents =mv=.
+
+*** String Literals
+    :PROPERTIES:
+    :CUSTOM_ID: string-literals
+    :END:
+
+  Note 1
+
+  A string literal is zero or more Unicode code points enclosed in single
+  or double quotes. Unicode code points may also be represented by an
+  escape sequence. All code points may appear literally in a string
+  literal except for the closing quote code points, U+005C (REVERSE
+  SOLIDUS), U+000D (CARRIAGE RETURN), and U+000A (LINE FEED). Any code
+  points may appear in the form of an escape sequence. String literals
+  evaluate to ECMAScript String values. When generating these String
+  values Unicode code points are UTF-16 encoded as defined in
+  [[https://tc39.es/ecma262/#sec-utf16encoding][10.1.1]]. Code points
+  belonging to the Basic Multilingual Plane are encoded as a single code
+  unit element of the string. All other code points are encoded as two
+  code unit elements of the string.
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-13
+     :END:
+
+  [[StringLiteral][StringLiteral]]::"[[DoubleStringCharacters][DoubleStringCharacters]]opt"
+  '[[SingleStringCharacters][SingleStringCharacters]]opt'
+  [[DoubleStringCharacters][DoubleStringCharacters]]::[[DoubleStringCharacter][DoubleStringCharacter]][[DoubleStringCharacters][DoubleStringCharacters]]opt
+  [[SingleStringCharacters][SingleStringCharacters]]::[[SingleStringCharacter][SingleStringCharacter]][[SingleStringCharacters][SingleStringCharacters]]opt
+  [[DoubleStringCharacter][DoubleStringCharacter]]::[[SourceCharacter][SourceCharacter]]but
+  not one of " or \ or
+  [[LineTerminator][LineTerminator]] <LS>
+  <PS> \[[EscapeSequence][EscapeSequence]]
+  [[LineContinuation][LineContinuation]]
+  [[SingleStringCharacter][SingleStringCharacter]]::[[SourceCharacter][SourceCharacter]]but
+  not one of ' or \ or
+  [[LineTerminator][LineTerminator]] <LS>
+  <PS> \[[EscapeSequence][EscapeSequence]]
+  [[LineContinuation][LineContinuation]]
+  [[LineContinuation][LineContinuation]]::\[[LineTerminatorSequence][LineTerminatorSequence]]
+  [[EscapeSequence][EscapeSequence]]::[[CharacterEscapeSequence][CharacterEscapeSequence]]
+  0[lookahead ∉
+  [[DecimalDigit][DecimalDigit]]]
+  [[HexEscapeSequence][HexEscapeSequence]]
+  [[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+  A conforming implementation, when processing
+  [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]],
+  must not extend the syntax of
+  [[EscapeSequence][EscapeSequence]] to
+  include
+  [[annexB-LegacyOctalEscapeSequence][LegacyOctalEscapeSequence]]
+  as described in
+  [[https://tc39.es/ecma262/#sec-additional-syntax-string-literals][B.1.2]].
+
+  [[CharacterEscapeSequence][CharacterEscapeSequence]]::[[SingleEscapeCharacter][SingleEscapeCharacter]]
+  [[NonEscapeCharacter][NonEscapeCharacter]]
+  [[SingleEscapeCharacter][SingleEscapeCharacter]]::one
+  of'"\bfnrtv
+  [[NonEscapeCharacter][NonEscapeCharacter]]::[[SourceCharacter][SourceCharacter]]but
+  not one of
+  [[EscapeCharacter][EscapeCharacter]] or
+  [[LineTerminator][LineTerminator]]
+  [[EscapeCharacter][EscapeCharacter]]::[[SingleEscapeCharacter][SingleEscapeCharacter]]
+  [[DecimalDigit][DecimalDigit]] x u
+  [[HexEscapeSequence][HexEscapeSequence]]::x[[HexDigit][HexDigit]][[HexDigit][HexDigit]]
+  [[UnicodeEscapeSequence][UnicodeEscapeSequence]]::u[[Hex4Digits][Hex4Digits]]
+  u{[[CodePoint][CodePoint]]}
+  [[Hex4Digits][Hex4Digits]]::[[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]]
+  The definition of the nonterminal
+  [[HexDigit][HexDigit]] is given in
+  [[https://tc39.es/ecma262/#sec-literals-numeric-literals][11.8.3]].
+  [[SourceCharacter][SourceCharacter]] is
+  defined in [[https://tc39.es/ecma262/#sec-source-text][10.1]].
+
+  Note 2
+
+  <LF> and <CR> cannot appear in a string literal, except as part of a
+  [[LineContinuation][LineContinuation]] to
+  produce the empty code points sequence. The proper way to include either
+  in the String value of a string literal is to use an escape sequence
+  such as =\n= or =\u000A=.
+
+**** Static Semantics: StringValue
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-stringvalue-1
+     :END:
+
+   [[StringLiteral][StringLiteral]]::"[[DoubleStringCharacters][DoubleStringCharacters]]opt"
+   '[[SingleStringCharacters][SingleStringCharacters]]opt'
+
+   1. Return the String value whose code units are the SV of this
+      [[StringLiteral][StringLiteral]].
+
+**** Static Semantics: SV
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-sv
+     :END:
+
+   A string literal stands for a value of the String type. The String value
+   (SV) of the literal is described in terms of code unit values
+   contributed by the various parts of the string literal. As part of this
+   process, some Unicode code points within the string literal are
+   interpreted as having a
+   [[https://tc39.es/ecma262/#mathematical-value][mathematical value]]
+   (MV), as described below or in
+   [[https://tc39.es/ecma262/#sec-literals-numeric-literals][11.8.3]].
+
+   - The SV of
+     [[StringLiteral][StringLiteral]]::"" is
+     the empty code unit sequence.
+   - The SV of
+     [[StringLiteral][StringLiteral]]::'' is
+     the empty code unit sequence.
+   - The SV of
+     [[StringLiteral][StringLiteral]]::"[[DoubleStringCharacters][DoubleStringCharacters]]"
+     is the SV of
+     [[DoubleStringCharacters][DoubleStringCharacters]].
+   - The SV of
+     [[StringLiteral][StringLiteral]]::'[[SingleStringCharacters][SingleStringCharacters]]'
+     is the SV of
+     [[SingleStringCharacters][SingleStringCharacters]].
+   - The SV of
+     [[DoubleStringCharacters][DoubleStringCharacters]]::[[DoubleStringCharacter][DoubleStringCharacter]]
+     is a sequence of up to two code units that is the SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]].
+   - The SV of
+     [[DoubleStringCharacters][DoubleStringCharacters]]::[[DoubleStringCharacter][DoubleStringCharacter]][[DoubleStringCharacters][DoubleStringCharacters]]
+     is a sequence of up to two code units that is the SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]]
+     followed by the code units of the SV of
+     [[DoubleStringCharacters][DoubleStringCharacters]]
+     in order.
+   - The SV of
+     [[SingleStringCharacters][SingleStringCharacters]]::[[SingleStringCharacter][SingleStringCharacter]]
+     is a sequence of up to two code units that is the SV of
+     [[SingleStringCharacter][SingleStringCharacter]].
+   - The SV of
+     [[SingleStringCharacters][SingleStringCharacters]]::[[SingleStringCharacter][SingleStringCharacter]][[SingleStringCharacters][SingleStringCharacters]]
+     is a sequence of up to two code units that is the SV of
+     [[SingleStringCharacter][SingleStringCharacter]]
+     followed by the code units of the SV of
+     [[SingleStringCharacters][SingleStringCharacters]]
+     in order.
+   - The SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]]::[[SourceCharacter][SourceCharacter]]but
+     not one of " or \ or
+     [[LineTerminator][LineTerminator]] is
+     the [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of
+     the code point value of
+     [[SourceCharacter][SourceCharacter]].
+   - The SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]]::<LS>
+     is the code unit 0x2028 (LINE SEPARATOR).
+   - The SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]]::<PS>
+     is the code unit 0x2029 (PARAGRAPH SEPARATOR).
+   - The SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]]::\[[EscapeSequence][EscapeSequence]]
+     is the SV of
+     [[EscapeSequence][EscapeSequence]].
+   - The SV of
+     [[DoubleStringCharacter][DoubleStringCharacter]]::[[LineContinuation][LineContinuation]]
+     is the empty code unit sequence.
+   - The SV of
+     [[SingleStringCharacter][SingleStringCharacter]]::[[SourceCharacter][SourceCharacter]]but
+     not one of ' or \ or
+     [[LineTerminator][LineTerminator]] is
+     the [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of
+     the code point value of
+     [[SourceCharacter][SourceCharacter]].
+   - The SV of
+     [[SingleStringCharacter][SingleStringCharacter]]::<LS>
+     is the code unit 0x2028 (LINE SEPARATOR).
+   - The SV of
+     [[SingleStringCharacter][SingleStringCharacter]]::<PS>
+     is the code unit 0x2029 (PARAGRAPH SEPARATOR).
+   - The SV of
+     [[SingleStringCharacter][SingleStringCharacter]]::\[[EscapeSequence][EscapeSequence]]
+     is the SV of
+     [[EscapeSequence][EscapeSequence]].
+   - The SV of
+     [[SingleStringCharacter][SingleStringCharacter]]::[[LineContinuation][LineContinuation]]
+     is the empty code unit sequence.
+   - The SV of
+     [[EscapeSequence][EscapeSequence]]::[[CharacterEscapeSequence][CharacterEscapeSequence]]
+     is the SV of
+     [[CharacterEscapeSequence][CharacterEscapeSequence]].
+   - The SV of
+     [[EscapeSequence][EscapeSequence]]::0 is
+     the code unit 0x0000 (NULL).
+   - The SV of
+     [[EscapeSequence][EscapeSequence]]::[[HexEscapeSequence][HexEscapeSequence]]
+     is the SV of
+     [[HexEscapeSequence][HexEscapeSequence]].
+   - The SV of
+     [[EscapeSequence][EscapeSequence]]::[[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+     is the SV of
+     [[UnicodeEscapeSequence][UnicodeEscapeSequence]].
+   - The SV of
+     [[CharacterEscapeSequence][CharacterEscapeSequence]]::[[SingleEscapeCharacter][SingleEscapeCharacter]]
+     is the code unit whose value is determined by the
+     [[SingleEscapeCharacter][SingleEscapeCharacter]]
+     according to [[https://tc39.es/ecma262/#table-34][Table 36]].
+
+   Table 36: String Single Character Escape Sequences
+   | Escape Sequence   | Code Unit Value   | Unicode Character Name   | Symbol   |
+   |-------------------+-------------------+--------------------------+----------|
+   | =\b=              | =0x0008=          | BACKSPACE                | <BS>     |
+   | =\t=              | =0x0009=          | CHARACTER TABULATION     | <HT>     |
+   | =\n=              | =0x000A=          | LINE FEED (LF)           | <LF>     |
+   | =\v=              | =0x000B=          | LINE TABULATION          | <VT>     |
+   | =\f=              | =0x000C=          | FORM FEED (FF)           | <FF>     |
+   | =\r=              | =0x000D=          | CARRIAGE RETURN (CR)     | <CR>     |
+   | =\"=              | =0x0022=          | QUOTATION MARK           | ="=      |
+   | =\'=              | =0x0027=          | APOSTROPHE               | ='=      |
+   | =\\=              | =0x005C=          | REVERSE SOLIDUS          | =\=      |
+
+   - The SV of
+     [[CharacterEscapeSequence][CharacterEscapeSequence]]::[[NonEscapeCharacter][NonEscapeCharacter]]
+     is the SV of
+     [[NonEscapeCharacter][NonEscapeCharacter]].
+   - The SV of
+     [[NonEscapeCharacter][NonEscapeCharacter]]::[[SourceCharacter][SourceCharacter]]but
+     not one of
+     [[EscapeCharacter][EscapeCharacter]] or
+     [[LineTerminator][LineTerminator]] is
+     the [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of
+     the code point value of
+     [[SourceCharacter][SourceCharacter]].
+   - The SV of
+     [[HexEscapeSequence][HexEscapeSequence]]::x[[HexDigit][HexDigit]][[HexDigit][HexDigit]]
+     is the code unit whose value is
+     (16_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]} times the MV of the
+     first [[HexDigit][HexDigit]]) plus the
+     MV of the second [[HexDigit][HexDigit]].
+   - The SV of
+     [[UnicodeEscapeSequence][UnicodeEscapeSequence]]::u[[Hex4Digits][Hex4Digits]]
+     is the SV of [[Hex4Digits][Hex4Digits]].
+   - The SV of
+     [[Hex4Digits][Hex4Digits]]::[[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]]
+     is the code unit whose value is
+     (0x1000_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]} times the MV of
+     the first [[HexDigit][HexDigit]]) plus
+     (0x100_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]} times the MV of the
+     second [[HexDigit][HexDigit]]) plus
+     (0x10_{[[https://tc39.es/ecma262/#%E2%84%9D][ℝ]]} times the MV of the
+     third [[HexDigit][HexDigit]]) plus the
+     MV of the fourth [[HexDigit][HexDigit]].
+   - The SV of
+     [[UnicodeEscapeSequence][UnicodeEscapeSequence]]::u{[[CodePoint][CodePoint]]}
+     is the [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]]
+     of the MV of [[CodePoint][CodePoint]].
+
+*** Regular Expression Literals
+    :PROPERTIES:
+    :CUSTOM_ID: regular-expression-literals
+    :END:
+
+  Note 1
+
+  A regular expression literal is an input element that is converted to a
+  RegExp object (see
+  [[https://tc39.es/ecma262/#sec-regexp-regular-expression-objects][21.2]])
+  each time the literal is evaluated. Two regular expression literals in a
+  program evaluate to regular expression objects that never compare as
+  ===== to each other even if the two literals' contents are identical. A
+  RegExp object may also be created at runtime by =new RegExp= or calling
+  the =RegExp= [[https://tc39.es/ecma262/#constructor][constructor]] as a
+  function (see
+  [[https://tc39.es/ecma262/#sec-regexp-constructor][21.2.3]]).
+
+  The productions below describe the syntax for a regular expression
+  literal and are used by the input element scanner to find the end of the
+  regular expression literal. The source text comprising the
+  [[RegularExpressionBody][RegularExpressionBody]]
+  and the
+  [[RegularExpressionFlags][RegularExpressionFlags]]
+  are subsequently parsed again using the more stringent ECMAScript
+  Regular Expression grammar
+  ([[https://tc39.es/ecma262/#sec-patterns][21.2.1]]).
+
+  An implementation may extend the ECMAScript Regular Expression grammar
+  defined in [[https://tc39.es/ecma262/#sec-patterns][21.2.1]], but it
+  must not extend the
+  [[RegularExpressionBody][RegularExpressionBody]]
+  and
+  [[RegularExpressionFlags][RegularExpressionFlags]]
+  productions defined below or the productions used by these productions.
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-14
+     :END:
+
+  [[RegularExpressionLiteral][RegularExpressionLiteral]]::/[[RegularExpressionBody][RegularExpressionBody]]/[[RegularExpressionFlags][RegularExpressionFlags]]
+  [[RegularExpressionBody][RegularExpressionBody]]::[[RegularExpressionFirstChar][RegularExpressionFirstChar]][[RegularExpressionChars][RegularExpressionChars]]
+  [[RegularExpressionChars][RegularExpressionChars]]::[empty]
+  [[RegularExpressionChars][RegularExpressionChars]][[RegularExpressionChar][RegularExpressionChar]]
+  [[RegularExpressionFirstChar][RegularExpressionFirstChar]]::[[RegularExpressionNonTerminator][RegularExpressionNonTerminator]]but
+  not one of * or \ or / or [
+  [[RegularExpressionBackslashSequence][RegularExpressionBackslashSequence]]
+  [[RegularExpressionClass][RegularExpressionClass]]
+  [[RegularExpressionChar][RegularExpressionChar]]::[[RegularExpressionNonTerminator][RegularExpressionNonTerminator]]but
+  not one of \ or / or [
+  [[RegularExpressionBackslashSequence][RegularExpressionBackslashSequence]]
+  [[RegularExpressionClass][RegularExpressionClass]]
+  [[RegularExpressionBackslashSequence][RegularExpressionBackslashSequence]]::\[[RegularExpressionNonTerminator][RegularExpressionNonTerminator]]
+  [[RegularExpressionNonTerminator][RegularExpressionNonTerminator]]::[[SourceCharacter][SourceCharacter]]but
+  not [[LineTerminator][LineTerminator]]
+  [[RegularExpressionClass][RegularExpressionClass]]::[[[RegularExpressionClassChars][RegularExpressionClassChars]]]
+  [[RegularExpressionClassChars][RegularExpressionClassChars]]::[empty]
+  [[RegularExpressionClassChars][RegularExpressionClassChars]][[RegularExpressionClassChar][RegularExpressionClassChar]]
+  [[RegularExpressionClassChar][RegularExpressionClassChar]]::[[RegularExpressionNonTerminator][RegularExpressionNonTerminator]]but
+  not one of ] or \
+  [[RegularExpressionBackslashSequence][RegularExpressionBackslashSequence]]
+  [[RegularExpressionFlags][RegularExpressionFlags]]::[empty]
+  [[RegularExpressionFlags][RegularExpressionFlags]][[IdentifierPart][IdentifierPart]]
+  Note 2
+
+  Regular expression literals may not be empty; instead of representing an
+  empty regular expression literal, the code unit sequence =//= starts a
+  single-line comment. To specify an empty regular expression, use:
+  =/(?:)/=.
+
+**** Static Semantics: Early Errors
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-early-errors-1
+     :END:
+
+   [[RegularExpressionFlags][RegularExpressionFlags]]::[[RegularExpressionFlags][RegularExpressionFlags]][[IdentifierPart][IdentifierPart]]
+
+   - It is a Syntax Error if
+     [[IdentifierPart][IdentifierPart]]
+     contains a Unicode escape sequence.
+
+**** Static Semantics: BodyText
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-bodytext
+     :END:
+
+   [[RegularExpressionLiteral][RegularExpressionLiteral]]::/[[RegularExpressionBody][RegularExpressionBody]]/[[RegularExpressionFlags][RegularExpressionFlags]]
+
+   1. Return the source text that was recognized as
+      [[RegularExpressionBody][RegularExpressionBody]].
+
+**** Static Semantics: FlagText
+     :PROPERTIES:
+     :CUSTOM_ID: static-semantics-flagtext
+     :END:
+
+   [[RegularExpressionLiteral][RegularExpressionLiteral]]::/[[RegularExpressionBody][RegularExpressionBody]]/[[RegularExpressionFlags][RegularExpressionFlags]]
+
+   1. Return the source text that was recognized as
+      [[RegularExpressionFlags][RegularExpressionFlags]].
+
+*** Template Literal Lexical Components
+    :PROPERTIES:
+    :CUSTOM_ID: template-literal-lexical-components
+    :END:
+
+**** Syntax
+     :PROPERTIES:
+     :CUSTOM_ID: syntax-15
+     :END:
+
+  [[Template][Template]]::[[NoSubstitutionTemplate][NoSubstitutionTemplate]]
+  [[TemplateHead][TemplateHead]]
+  [[NoSubstitutionTemplate][NoSubstitutionTemplate]]::`[[TemplateCharacters][TemplateCharacters]]opt`
+  [[TemplateHead][TemplateHead]]::`[[TemplateCharacters][TemplateCharacters]]opt${
+  [[TemplateSubstitutionTail][TemplateSubstitutionTail]]::[[TemplateMiddle][TemplateMiddle]]
+  [[TemplateTail][TemplateTail]]
+  [[TemplateMiddle][TemplateMiddle]]::}[[TemplateCharacters][TemplateCharacters]]opt${
+  [[TemplateTail][TemplateTail]]::}[[TemplateCharacters][TemplateCharacters]]opt`
+  [[TemplateCharacters][TemplateCharacters]]::[[TemplateCharacter][TemplateCharacter]][[TemplateCharacters][TemplateCharacters]]opt
+  [[TemplateCharacter][TemplateCharacter]]::$[lookahead
+  ≠ {] \[[EscapeSequence][EscapeSequence]]
+  \[[NotEscapeSequence][NotEscapeSequence]]
+  [[LineContinuation][LineContinuation]]
+  [[LineTerminatorSequence][LineTerminatorSequence]]
+  [[SourceCharacter][SourceCharacter]]but
+  not one of ` or \ or $ or
+  [[LineTerminator][LineTerminator]]
+  [[NotEscapeSequence][NotEscapeSequence]]::0[[DecimalDigit][DecimalDigit]]
+  [[DecimalDigit][DecimalDigit]]but not 0
+  x[lookahead ∉ [[HexDigit][HexDigit]]]
+  x[[HexDigit][HexDigit]][lookahead ∉
+  [[HexDigit][HexDigit]]] u[lookahead ∉
+  [[HexDigit][HexDigit]]][lookahead ≠ {]
+  u[[HexDigit][HexDigit]][lookahead ∉
+  [[HexDigit][HexDigit]]]
+  u[[HexDigit][HexDigit]][[HexDigit][HexDigit]][lookahead
+  ∉ [[HexDigit][HexDigit]]]
+  u[[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]][lookahead
+  ∉ [[HexDigit][HexDigit]]] u{[lookahead ∉
+  [[HexDigit][HexDigit]]]
+  u{[[NotCodePoint][NotCodePoint]][lookahead
+  ∉ [[HexDigit][HexDigit]]]
+  u{[[CodePoint][CodePoint]][lookahead ∉
+  [[HexDigit][HexDigit]]][lookahead ≠ }]
+  [[NotCodePoint][NotCodePoint]]::[[HexDigits][HexDigits]]but
+  only if MV of [[HexDigits][HexDigits]] >
+  0x10FFFF
+  [[CodePoint][CodePoint]]::[[HexDigits][HexDigits]]but
+  only if MV of [[HexDigits][HexDigits]] ≤
+  0x10FFFF
+  A conforming implementation must not use the extended definition of
+  [[EscapeSequence][EscapeSequence]]
+  described in
+  [[https://tc39.es/ecma262/#sec-additional-syntax-string-literals][B.1.2]]
+  when parsing a
+  [[TemplateCharacter][TemplateCharacter]].
+
+  Note
+
+  [[TemplateSubstitutionTail][TemplateSubstitutionTail]]
+  is used by the
+  [[InputElementTemplateTail][InputElementTemplateTail]]
+  alternative lexical goal.
+
+*** Static Semantics: TV and TRV
+    :PROPERTIES:
+    :CUSTOM_ID: static-semantics-tv-and-trv
+    :END:
+
+  A template literal component is interpreted as a sequence of Unicode
+  code points. The Template Value (TV) of a literal component is described
+  in terms of code unit values (SV,
+  [[https://tc39.es/ecma262/#sec-literals-string-literals][11.8.4]])
+  contributed by the various parts of the template literal component. As
+  part of this process, some Unicode code points within the template
+  component are interpreted as having a
+  [[https://tc39.es/ecma262/#mathematical-value][mathematical value]] (MV,
+  [[https://tc39.es/ecma262/#sec-literals-numeric-literals][11.8.3]]). In
+  determining a TV, escape sequences are replaced by the UTF-16 code
+  unit(s) of the Unicode code point represented by the escape sequence.
+  The Template Raw Value (TRV) is similar to a Template Value with the
+  difference that in TRVs escape sequences are interpreted literally.
+
+  - The TV and TRV of
+    [[NoSubstitutionTemplate][NoSubstitutionTemplate]]::``
+    is the empty code unit sequence.
+  - The TV and TRV of
+    [[TemplateHead][TemplateHead]]::`${ is
+    the empty code unit sequence.
+  - The TV and TRV of
+    [[TemplateMiddle][TemplateMiddle]]::}${
+    is the empty code unit sequence.
+  - The TV and TRV of
+    [[TemplateTail][TemplateTail]]::}` is
+    the empty code unit sequence.
+  - The TV of
+    [[NoSubstitutionTemplate][NoSubstitutionTemplate]]::`[[TemplateCharacters][TemplateCharacters]]`
+    is the TV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TV of
+    [[TemplateHead][TemplateHead]]::`[[TemplateCharacters][TemplateCharacters]]${
+    is the TV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TV of
+    [[TemplateMiddle][TemplateMiddle]]::}[[TemplateCharacters][TemplateCharacters]]${
+    is the TV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TV of
+    [[TemplateTail][TemplateTail]]::}[[TemplateCharacters][TemplateCharacters]]`
+    is the TV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TV of
+    [[TemplateCharacters][TemplateCharacters]]::[[TemplateCharacter][TemplateCharacter]]
+    is the TV of
+    [[TemplateCharacter][TemplateCharacter]].
+  - The TV of
+    [[TemplateCharacters][TemplateCharacters]]::[[TemplateCharacter][TemplateCharacter]][[TemplateCharacters][TemplateCharacters]]
+    is undefined if either the TV of
+    [[TemplateCharacter][TemplateCharacter]]
+    is undefined or the TV of
+    [[TemplateCharacters][TemplateCharacters]]
+    is undefined. Otherwise, it is a sequence consisting of the code units
+    of the TV of
+    [[TemplateCharacter][TemplateCharacter]]
+    followed by the code units of the TV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TV of
+    [[TemplateCharacter][TemplateCharacter]]::[[SourceCharacter][SourceCharacter]]but
+    not one of ` or \ or $ or
+    [[LineTerminator][LineTerminator]] is
+    the [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of
+    the code point value of
+    [[SourceCharacter][SourceCharacter]].
+  - The TV of
+    [[TemplateCharacter][TemplateCharacter]]::$
+    is the code unit 0x0024 (DOLLAR SIGN).
+  - The TV of
+    [[TemplateCharacter][TemplateCharacter]]::\[[EscapeSequence][EscapeSequence]]
+    is the SV of
+    [[EscapeSequence][EscapeSequence]].
+  - The TV of
+    [[TemplateCharacter][TemplateCharacter]]::\[[NotEscapeSequence][NotEscapeSequence]]
+    is undefined.
+  - The TV of
+    [[TemplateCharacter][TemplateCharacter]]::[[LineContinuation][LineContinuation]]
+    is the TV of
+    [[LineContinuation][LineContinuation]].
+  - The TV of
+    [[TemplateCharacter][TemplateCharacter]]::[[LineTerminatorSequence][LineTerminatorSequence]]
+    is the TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]].
+  - The TV of
+    [[LineContinuation][LineContinuation]]::\[[LineTerminatorSequence][LineTerminatorSequence]]
+    is the empty code unit sequence.
+  - The TRV of
+    [[NoSubstitutionTemplate][NoSubstitutionTemplate]]::`[[TemplateCharacters][TemplateCharacters]]`
+    is the TRV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TRV of
+    [[TemplateHead][TemplateHead]]::`[[TemplateCharacters][TemplateCharacters]]${
+    is the TRV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TRV of
+    [[TemplateMiddle][TemplateMiddle]]::}[[TemplateCharacters][TemplateCharacters]]${
+    is the TRV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TRV of
+    [[TemplateTail][TemplateTail]]::}[[TemplateCharacters][TemplateCharacters]]`
+    is the TRV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TRV of
+    [[TemplateCharacters][TemplateCharacters]]::[[TemplateCharacter][TemplateCharacter]]
+    is the TRV of
+    [[TemplateCharacter][TemplateCharacter]].
+  - The TRV of
+    [[TemplateCharacters][TemplateCharacters]]::[[TemplateCharacter][TemplateCharacter]][[TemplateCharacters][TemplateCharacters]]
+    is a sequence consisting of the code units of the TRV of
+    [[TemplateCharacter][TemplateCharacter]]
+    followed by the code units of the TRV of
+    [[TemplateCharacters][TemplateCharacters]].
+  - The TRV of
+    [[TemplateCharacter][TemplateCharacter]]::[[SourceCharacter][SourceCharacter]]but
+    not one of ` or \ or $ or
+    [[LineTerminator][LineTerminator]] is
+    the [[https://tc39.es/ecma262/#sec-utf16encoding][UTF16Encoding]] of
+    the code point value of
+    [[SourceCharacter][SourceCharacter]].
+  - The TRV of
+    [[TemplateCharacter][TemplateCharacter]]::$
+    is the code unit 0x0024 (DOLLAR SIGN).
+  - The TRV of
+    [[TemplateCharacter][TemplateCharacter]]::\[[EscapeSequence][EscapeSequence]]
+    is the sequence consisting of the code unit 0x005C (REVERSE SOLIDUS)
+    followed by the code units of TRV of
+    [[EscapeSequence][EscapeSequence]].
+  - The TRV of
+    [[TemplateCharacter][TemplateCharacter]]::\[[NotEscapeSequence][NotEscapeSequence]]
+    is the sequence consisting of the code unit 0x005C (REVERSE SOLIDUS)
+    followed by the code units of TRV of
+    [[NotEscapeSequence][NotEscapeSequence]].
+  - The TRV of
+    [[TemplateCharacter][TemplateCharacter]]::[[LineContinuation][LineContinuation]]
+    is the TRV of
+    [[LineContinuation][LineContinuation]].
+  - The TRV of
+    [[TemplateCharacter][TemplateCharacter]]::[[LineTerminatorSequence][LineTerminatorSequence]]
+    is the TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]].
+  - The TRV of
+    [[EscapeSequence][EscapeSequence]]::[[CharacterEscapeSequence][CharacterEscapeSequence]]
+    is the TRV of
+    [[CharacterEscapeSequence][CharacterEscapeSequence]].
+  - The TRV of
+    [[EscapeSequence][EscapeSequence]]::0 is
+    the code unit 0x0030 (DIGIT ZERO).
+  - The TRV of
+    [[EscapeSequence][EscapeSequence]]::[[HexEscapeSequence][HexEscapeSequence]]
+    is the TRV of
+    [[HexEscapeSequence][HexEscapeSequence]].
+  - The TRV of
+    [[EscapeSequence][EscapeSequence]]::[[UnicodeEscapeSequence][UnicodeEscapeSequence]]
+    is the TRV of
+    [[UnicodeEscapeSequence][UnicodeEscapeSequence]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::0[[DecimalDigit][DecimalDigit]]
+    is the sequence consisting of the code unit 0x0030 (DIGIT ZERO)
+    followed by the code units of the TRV of
+    [[DecimalDigit][DecimalDigit]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::x[lookahead
+    ∉ [[HexDigit][HexDigit]]] is the code
+    unit 0x0078 (LATIN SMALL LETTER X).
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::x[[HexDigit][HexDigit]][lookahead
+    ∉ [[HexDigit][HexDigit]]] is the
+    sequence consisting of the code unit 0x0078 (LATIN SMALL LETTER X)
+    followed by the code units of the TRV of
+    [[HexDigit][HexDigit]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u[lookahead
+    ∉ [[HexDigit][HexDigit]]][lookahead ≠ {]
+    is the code unit 0x0075 (LATIN SMALL LETTER U).
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u[[HexDigit][HexDigit]][lookahead
+    ∉ [[HexDigit][HexDigit]]] is the
+    sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER U)
+    followed by the code units of the TRV of
+    [[HexDigit][HexDigit]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u[[HexDigit][HexDigit]][[HexDigit][HexDigit]][lookahead
+    ∉ [[HexDigit][HexDigit]]] is the
+    sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER U)
+    followed by the code units of the TRV of the first
+    [[HexDigit][HexDigit]] followed by the
+    code units of the TRV of the second
+    [[HexDigit][HexDigit]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u[[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]][lookahead
+    ∉ [[HexDigit][HexDigit]]] is the
+    sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER U)
+    followed by the code units of the TRV of the first
+    [[HexDigit][HexDigit]] followed by the
+    code units of the TRV of the second
+    [[HexDigit][HexDigit]] followed by the
+    code units of the TRV of the third
+    [[HexDigit][HexDigit]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u{[lookahead
+    ∉ [[HexDigit][HexDigit]]] is the
+    sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER U)
+    followed by the code unit 0x007B (LEFT CURLY BRACKET).
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u{[[NotCodePoint][NotCodePoint]][lookahead
+    ∉ [[HexDigit][HexDigit]]] is the
+    sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER U)
+    followed by the code unit 0x007B (LEFT CURLY BRACKET) followed by the
+    code units of the TRV of
+    [[NotCodePoint][NotCodePoint]].
+  - The TRV of
+    [[NotEscapeSequence][NotEscapeSequence]]::u{[[CodePoint][CodePoint]][lookahead
+    ∉ [[HexDigit][HexDigit]]][lookahead ≠ }]
+    is the sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER
+    U) followed by the code unit 0x007B (LEFT CURLY BRACKET) followed by
+    the code units of the TRV of
+    [[CodePoint][CodePoint]].
+  - The TRV of
+    [[DecimalDigit][DecimalDigit]]::one
+    of0123456789 is the SV of the
+    [[SourceCharacter][SourceCharacter]]
+    that is that single code point.
+  - The TRV of
+    [[CharacterEscapeSequence][CharacterEscapeSequence]]::[[SingleEscapeCharacter][SingleEscapeCharacter]]
+    is the TRV of
+    [[SingleEscapeCharacter][SingleEscapeCharacter]].
+  - The TRV of
+    [[CharacterEscapeSequence][CharacterEscapeSequence]]::[[NonEscapeCharacter][NonEscapeCharacter]]
+    is the SV of
+    [[NonEscapeCharacter][NonEscapeCharacter]].
+  - The TRV of
+    [[SingleEscapeCharacter][SingleEscapeCharacter]]::one
+    of'"\bfnrtv is the SV of the
+    [[SourceCharacter][SourceCharacter]]
+    that is that single code point.
+  - The TRV of
+    [[HexEscapeSequence][HexEscapeSequence]]::x[[HexDigit][HexDigit]][[HexDigit][HexDigit]]
+    is the sequence consisting of the code unit 0x0078 (LATIN SMALL LETTER
+    X) followed by TRV of the first
+    [[HexDigit][HexDigit]] followed by the
+    TRV of the second
+    [[HexDigit][HexDigit]].
+  - The TRV of
+    [[UnicodeEscapeSequence][UnicodeEscapeSequence]]::u[[Hex4Digits][Hex4Digits]]
+    is the sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER
+    U) followed by TRV of
+    [[Hex4Digits][Hex4Digits]].
+  - The TRV of
+    [[UnicodeEscapeSequence][UnicodeEscapeSequence]]::u{[[CodePoint][CodePoint]]}
+    is the sequence consisting of the code unit 0x0075 (LATIN SMALL LETTER
+    U) followed by the code unit 0x007B (LEFT CURLY BRACKET) followed by
+    TRV of [[CodePoint][CodePoint]] followed
+    by the code unit 0x007D (RIGHT CURLY BRACKET).
+  - The TRV of
+    [[Hex4Digits][Hex4Digits]]::[[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]][[HexDigit][HexDigit]]
+    is the sequence consisting of the TRV of the first
+    [[HexDigit][HexDigit]] followed by the
+    TRV of the second [[HexDigit][HexDigit]]
+    followed by the TRV of the third
+    [[HexDigit][HexDigit]] followed by the
+    TRV of the fourth
+    [[HexDigit][HexDigit]].
+  - The TRV of
+    [[HexDigits][HexDigits]]::[[HexDigit][HexDigit]]
+    is the TRV of [[HexDigit][HexDigit]].
+  - The TRV of
+    [[HexDigits][HexDigits]]::[[HexDigits][HexDigits]][[HexDigit][HexDigit]]
+    is the sequence consisting of TRV of
+    [[HexDigits][HexDigits]] followed by TRV
+    of [[HexDigit][HexDigit]].
+  - The TRV of a [[HexDigit][HexDigit]] is
+    the SV of the
+    [[SourceCharacter][SourceCharacter]]
+    that is that [[HexDigit][HexDigit]].
+  - The TRV of
+    [[LineContinuation][LineContinuation]]::\[[LineTerminatorSequence][LineTerminatorSequence]]
+    is the sequence consisting of the code unit 0x005C (REVERSE SOLIDUS)
+    followed by the code units of TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]].
+  - The TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]]::<LF>
+    is the code unit 0x000A (LINE FEED).
+  - The TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]]::<CR>
+    is the code unit 0x000A (LINE FEED).
+  - The TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]]::<LS>
+    is the code unit 0x2028 (LINE SEPARATOR).
+  - The TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]]::<PS>
+    is the code unit 0x2029 (PARAGRAPH SEPARATOR).
+  - The TRV of
+    [[LineTerminatorSequence][LineTerminatorSequence]]::<CR><LF>
+    is the sequence consisting of the code unit 0x000A (LINE FEED).
+
+  Note
+
+  TV excludes the code units of
+  [[LineContinuation][LineContinuation]]
+  while TRV includes them. <CR><LF> and <CR>
+  [[LineTerminatorSequence][LineTerminatorSequence]]s
+  are normalized to <LF> for both TV and TRV. An explicit
+  [[EscapeSequence][EscapeSequence]] is
+  needed to include a <CR> or <CR><LF> sequence.
+
+** Automatic Semicolon Insertion
+   :PROPERTIES:
+   :CUSTOM_ID: automatic-semicolon-insertion
+   :END:
+
+ Most ECMAScript statements and declarations must be terminated with a
+ semicolon. Such semicolons may always appear explicitly in the source
+ text. For convenience, however, such semicolons may be omitted from the
+ source text in certain situations. These situations are described by
+ saying that semicolons are automatically inserted into the source code
+ token stream in those situations.
+
+*** Rules of Automatic Semicolon Insertion
+    :PROPERTIES:
+    :CUSTOM_ID: rules-of-automatic-semicolon-insertion
+    :END:
+
+  In the following rules, “token” means the actual recognized lexical
+  token determined using the current lexical
+  [[https://tc39.es/ecma262/#sec-context-free-grammars][goal symbol]] as
+  described in clause
+  [[https://tc39.es/ecma262/#sec-ecmascript-language-lexical-grammar][11]].
+
+  There are three basic rules of semicolon insertion:
+
+  1. When, as the source text is parsed from left to right, a token
+     (called the /offending token/) is encountered that is not allowed by
+     any production of the grammar, then a semicolon is automatically
+     inserted before the offending token if one or more of the following
+     conditions is true:
+
+     - The offending token is separated from the previous token by at
+       least one
+       [[LineTerminator][LineTerminator]].
+     - The offending token is =}=.
+     - The previous token is =)= and the inserted semicolon would then be
+       parsed as the terminating semicolon of a do-while statement
+       ([[https://tc39.es/ecma262/#sec-do-while-statement][13.7.2]]).
+
+  2. When, as the source text is parsed from left to right, the end of the
+     input stream of tokens is encountered and the parser is unable to
+     parse the input token stream as a single instance of the goal
+     nonterminal, then a semicolon is automatically inserted at the end of
+     the input stream.
+
+  3. When, as the source text is parsed from left to right, a token is
+     encountered that is allowed by some production of the grammar, but
+     the production is a /restricted production/ and the token would be
+     the first token for a terminal or nonterminal immediately following
+     the annotation “[no
+     [[LineTerminator][LineTerminator]]
+     here]” within the restricted production (and therefore such a token
+     is called a restricted token), and the restricted token is separated
+     from the previous token by at least one
+     [[LineTerminator][LineTerminator]],
+     then a semicolon is automatically inserted before the restricted
+     token.
+
+  However, there is an additional overriding condition on the preceding
+  rules: a semicolon is never inserted automatically if the semicolon
+  would then be parsed as an empty statement or if that semicolon would
+  become one of the two semicolons in the header of a =for= statement (see
+  [[https://tc39.es/ecma262/#sec-for-statement][13.7.4]]).
+
+  Note
+
+  The following are the only restricted productions in the grammar:
+
+  [[asi-rules-UpdateExpression][UpdateExpression]][Yield,
+  Await]:[[LeftHandSideExpression][LeftHandSideExpression]][?Yield,
+  ?Await][no
+  [[LineTerminator][LineTerminator]] here]++
+  [[LeftHandSideExpression][LeftHandSideExpression]][?Yield,
+  ?Await][no
+  [[LineTerminator][LineTerminator]] here]--
+  [[asi-rules-ContinueStatement][ContinueStatement]][Yield,
+  Await]:continue; continue[no
+  [[LineTerminator][LineTerminator]]
+  here][[LabelIdentifier][LabelIdentifier]][?Yield,
+  ?Await];
+  [[asi-rules-BreakStatement][BreakStatement]][Yield,
+  Await]:break; break[no
+  [[LineTerminator][LineTerminator]]
+  here][[LabelIdentifier][LabelIdentifier]][?Yield,
+  ?Await];
+  [[asi-rules-ReturnStatement][ReturnStatement]][Yield,
+  Await]:return; return[no
+  [[LineTerminator][LineTerminator]]
+  here][[Expression][Expression]][+In,
+  ?Yield, ?Await];
+  [[asi-rules-ThrowStatement][ThrowStatement]][Yield,
+  Await]:throw[no
+  [[LineTerminator][LineTerminator]]
+  here][[Expression][Expression]][+In,
+  ?Yield, ?Await];
+  [[asi-rules-ArrowFunction][ArrowFunction]][In,
+  Yield,
+  Await]:[[ArrowParameters][ArrowParameters]][?Yield,
+  ?Await][no
+  [[LineTerminator][LineTerminator]]
+  here]=>[[ConciseBody][ConciseBody]][?In]
+  [[asi-rules-YieldExpression][YieldExpression]][In,
+  Await]:yield yield[no
+  [[LineTerminator][LineTerminator]]
+  here][[AssignmentExpression][AssignmentExpression]][?In,
+  +Yield, ?Await] yield[no
+  [[LineTerminator][LineTerminator]]
+  here]*[[AssignmentExpression][AssignmentExpression]][?In,
+  +Yield, ?Await]
+  The practical effect of these restricted productions is as follows:
+
+  - When a =++= or =--= token is encountered where the parser would treat
+    it as a postfix operator, and at least one
+    [[LineTerminator][LineTerminator]]
+    occurred between the preceding token and the =++= or =--= token, then
+    a semicolon is automatically inserted before the =++= or =--= token.
+  - When a =continue=, =break=, =return=, =throw=, or =yield= token is
+    encountered and a
+    [[LineTerminator][LineTerminator]] is
+    encountered before the next token, a semicolon is automatically
+    inserted after the =continue=, =break=, =return=, =throw=, or =yield=
+    token.
+
+  The resulting practical advice to ECMAScript programmers is:
+
+  - A postfix =++= or =--= operator should appear on the same line as its
+    operand.
+  - An [[Expression][Expression]] in a
+    =return= or =throw= statement or an
+    [[AssignmentExpression][AssignmentExpression]]
+    in a =yield= expression should start on the same line as the =return=,
+    =throw=, or =yield= token.
+  - A [[LabelIdentifier][LabelIdentifier]]
+    in a =break= or =continue= statement should be on the same line as the
+    =break= or =continue= token.
+
+*** Examples of Automatic Semicolon Insertion
+    :PROPERTIES:
+    :CUSTOM_ID: examples-of-automatic-semicolon-insertion
+    :END:
+
+  The source
+
+  #+BEGIN_EXAMPLE
+    { 1 2 } 3
+  #+END_EXAMPLE
+
+  is not a valid sentence in the ECMAScript grammar, even with the
+  automatic semicolon insertion rules. In contrast, the source
+
+  #+BEGIN_EXAMPLE
+    { 1
+    2 } 3
+  #+END_EXAMPLE
+
+  is also not a valid ECMAScript sentence, but is transformed by automatic
+  semicolon insertion into the following:
+
+  #+BEGIN_EXAMPLE
+    { 1
+    ;2 ;} 3;
+  #+END_EXAMPLE
+
+  which is a valid ECMAScript sentence.
+
+  The source
+
+  #+BEGIN_EXAMPLE
+    for (a; b
+    )
+  #+END_EXAMPLE
+
+  is not a valid ECMAScript sentence and is not altered by automatic
+  semicolon insertion because the semicolon is needed for the header of a
+  =for= statement. Automatic semicolon insertion never inserts one of the
+  two semicolons in the header of a =for= statement.
+
+  The source
+
+  #+BEGIN_EXAMPLE
+    return
+    a + b
+  #+END_EXAMPLE
+
+  is transformed by automatic semicolon insertion into the following:
+
+  #+BEGIN_EXAMPLE
+    return;
+    a + b;
+  #+END_EXAMPLE
+
+  Note 1
+
+  The expression =a + b= is not treated as a value to be returned by the
+  =return= statement, because a
+  [[LineTerminator][LineTerminator]]
+  separates it from the token =return=.
+
+  The source
+
+  #+BEGIN_EXAMPLE
+    a = b
+    ++c
+  #+END_EXAMPLE
+
+  is transformed by automatic semicolon insertion into the following:
+
+  #+BEGIN_EXAMPLE
+    a = b;
+    ++c;
+  #+END_EXAMPLE
+
+  Note 2
+
+  The token =++= is not treated as a postfix operator applying to the
+  variable =b=, because a
+  [[LineTerminator>>][LineTerminator]] occurs
+  between =b= and =++=.
+
+  The source
+
+  #+BEGIN_EXAMPLE
+    if (a > b)
+    else c = d
+  #+END_EXAMPLE
+
+  is not a valid ECMAScript sentence and is not altered by automatic
+  semicolon insertion before the =else= token, even though no production
+  of the grammar applies at that point, because an automatically inserted
+  semicolon would then be parsed as an empty statement.
+
+  The source
+
+  #+BEGIN_EXAMPLE
+    a = b + c
+    (d + e).print()
+  #+END_EXAMPLE
+
+  is /not/ transformed by automatic semicolon insertion, because the
+  parenthesized expression that begins the second line can be interpreted
+  as an argument list for a function call:
+
+  #+BEGIN_EXAMPLE
+    a = b + c(d + e).print()
+  #+END_EXAMPLE
+
+  In the circumstance that an assignment statement must begin with a left
+  parenthesis, it is a good idea for the programmer to provide an explicit
+  semicolon at the end of the preceding statement rather than to rely on
+  automatic semicolon insertion.
+
+
+
+
+** Copyright & Software License
+   :PROPERTIES:
+   :CUSTOM_ID: hcopyright-software-license
+   :END:
+
+ Ecma International
+
+ Rue du Rhone 114
+
+ CH-1204 Geneva
+
+ Tel: +41 22 849 6000
+
+ Fax: +41 22 849 6001
+
+ Web: [[https://ecma-international.org/]]
+
+*** Copyright Notice
+    :PROPERTIES:
+    :CUSTOM_ID: copyright-notice
+    :END:
+
+ © 2019 Ecma International
+
+ This draft document may be copied and furnished to others, and
+ derivative works that comment on or otherwise explain it or assist in
+ its implementation may be prepared, copied, published, and distributed,
+ in whole or in part, without restriction of any kind, provided that the
+ above copyright notice and this section are included on all such copies
+ and derivative works. However, this document itself may not be modified
+ in any way, including by removing the copyright notice or references to
+ Ecma International, except as needed for the purpose of developing any
+ document or deliverable produced by Ecma International.
+
+ This disclaimer is valid only prior to final version of this document.
+ After approval all rights on the standard are reserved by Ecma
+ International.
+
+ The limited permissions are granted through the standardization phase
+ and will not be revoked by Ecma International or its successors or
+ assigns during this time.
+
+ This document and the information contained herein is provided on an "AS
+ IS" basis and ECMA INTERNATIONAL DISCLAIMS ALL WARRANTIES, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTY THAT THE USE OF THE
+ INFORMATION HEREIN WILL NOT INFRINGE ANY OWNERSHIP RIGHTS OR ANY IMPLIED
+ WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+
+*** Software License
+    :PROPERTIES:
+    :CUSTOM_ID: software-license
+    :END:
+
+ All Software contained in this document ("Software") is protected by
+ copyright and is being made available under the "BSD License", included
+ below. This Software may be subject to third party rights (rights from
+ parties other than Ecma International), including patent rights, and no
+ licenses under such third party rights are granted under this license
+ even if the third party concerned is a member of Ecma International. SEE
+ THE ECMA CODE OF CONDUCT IN PATENT MATTERS AVAILABLE AT
+ https://ecma-international.org/memento/codeofconduct.htm FOR INFORMATION
+ REGARDING THE LICENSING OF PATENT CLAIMS THAT ARE REQUIRED TO IMPLEMENT
+ ECMA INTERNATIONAL STANDARDS.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ 3. Neither the name of the authors nor Ecma International may be used to
+    endorse or promote products derived from this software without
+    specific prior written permission.
+
+ THIS SOFTWARE IS PROVIDED BY THE ECMA INTERNATIONAL "AS IS" AND ANY
+ EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL ECMA INTERNATIONAL BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
+
+ <<references-pane-container>>
+
+ <<references-pane-spacer>>
+
+ <<references-pane>>
+
+ References to <<>><<references-pane-close>>
+
+ <<references-pane-table-container>>
