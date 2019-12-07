@@ -1,0 +1,473 @@
+
+
+* ECMAScript Language: Source Code
+  :PROPERTIES:
+  :CUSTOM_ID: ecmascript-language-source-code
+  :END:
+
+** Source Text
+   :PROPERTIES:
+   :CUSTOM_ID: source-text
+   :END:
+
+*** Syntax
+    :PROPERTIES:
+    :CUSTOM_ID: source-character
+    :END:
+
+ #+NAME: SourceCharacter
+ #+begin_quote
+ [[SourceCharacter][SourceCharacter]]::any Unicode code point
+ #+end_quote
+
+ #+begin_src gerbil :tangle "source-code.ss"
+   (import :drewc/smug)
+   (export #t)
+
+   (def SourceCharacter (item))
+ #+end_src
+ ECMAScript code is expressed using Unicode. ECMAScript source text is a
+ sequence of code points. All Unicode code point values from U+0000 to U+10FFFF,
+ including surrogate code points, may occur in source text where permitted by
+ the ECMAScript grammars. The actual encodings used to store and interchange
+ ECMAScript source text is not relevant to this specification. Regardless of the
+ external source text encoding, a conforming ECMAScript implementation processes
+ the source text as if it was an equivalent sequence of
+ [[SourceCharacter][SourceCharacter]] values, each
+ [[SourceCharacter][SourceCharacter]] being a Unicode code point. Conforming
+ ECMAScript implementations are not required to perform any normalization of
+ source text, or behave as though they were performing normalization of source
+ text.
+
+ The components of a combining character sequence are treated as
+ individual Unicode code points even though a user might think of the
+ whole sequence as a single character.
+
+ *Note*
+
+ In string literals, regular expression literals, template literals and
+ identifiers, any Unicode code point may also be expressed using Unicode
+ escape sequences that explicitly express a code point's numeric value.
+ Within a comment, such an escape sequence is effectively ignored as part
+ of the comment.
+
+ ECMAScript differs from the Java programming language in the behaviour
+ of Unicode escape sequences. In a Java program, if the Unicode escape
+ sequence =\u000A=, for example, occurs within a single-line comment, it
+ is interpreted as a line terminator (Unicode code point U+000A is LINE
+ FEED (LF)) and therefore the next code point is not part of the comment.
+ Similarly, if the Unicode escape sequence =\u000A= occurs within a
+ string literal in a Java program, it is likewise interpreted as a line
+ terminator, which is not allowed within a string literal---one must
+ write =\n= instead of =\u000A= to cause a LINE FEED (LF) to be part of
+ the String value of a string literal. In an ECMAScript program, a
+ Unicode escape sequence occurring within a comment is never interpreted
+ and therefore cannot contribute to termination of the comment.
+ Similarly, a Unicode escape sequence occurring within a string literal
+ in an ECMAScript program always contributes to the literal and is never
+ interpreted as a line terminator or as a code point that might terminate
+ the string literal.
+
+*** Static Semantics: UTF16Encoding ( =cp= )
+    :PROPERTIES:
+    :CUSTOM_ID: static-semantics-utf16encoding-cp
+    :END:
+
+  The UTF16Encoding of a numeric code point value, =cp=, is determined as
+  follows:
+
+  1. [[https://tc39.es/ecma262/#assert][Assert]]: 0 ≤ =cp= ≤ 0x10FFFF.
+  2. If =cp= ≤ 0xFFFF, return =cp=.
+  3. Let =cu1= be [[https://tc39.es/ecma262/#eqn-floor][floor]]((=cp= -
+     0x10000) / 0x400) + 0xD800.
+  4. Let =cu2= be ((=cp= - 0x10000)
+     [[https://tc39.es/ecma262/#eqn-modulo][modulo]] 0x400) + 0xDC00.
+  5. Return the code unit sequence consisting of =cu1= followed by =cu2=.
+
+*** Static Semantics: UTF16Decode ( =lead=, =trail= )
+    :PROPERTIES:
+    :CUSTOM_ID: static-semantics-utf16decode-lead-trail
+    :END:
+
+  Two code units, =lead= and =trail=, that form a UTF-16
+  [[https://tc39.es/ecma262/#surrogate-pair][surrogate pair]] are
+  converted to a code point by performing the following steps:
+
+  1. [[https://tc39.es/ecma262/#assert][Assert]]: =lead= is a
+     [[https://tc39.es/ecma262/#leading-surrogate][leading surrogate]] and
+     =trail= is a [[https://tc39.es/ecma262/#trailing-surrogate][trailing
+     surrogate]].
+  2. Let =cp= be (=lead= - 0xD800) × 0x400 + (=trail= - 0xDC00) + 0x10000.
+  3. Return the code point =cp=.
+
+*** Static Semantics: CodePointAt ( =string=, =position= )
+    :PROPERTIES:
+    :CUSTOM_ID: static-semantics-codepointat-string-position
+    :END:
+
+  The abstract operation CodePointAt interprets a String =string= as a
+  sequence of UTF-16 encoded code points, as described in
+  [[https://tc39.es/ecma262/#sec-ecmascript-language-types-string-type][6.1.4]],
+  and reads from it a single code point starting with the code unit at
+  index =position=. When called, the following steps are performed:
+
+  1.  Let =size= be the length of =string=.
+  2.  [[https://tc39.es/ecma262/#assert][Assert]]: =position= ≥ 0 and
+      =position= < =size=.
+  3.  Let =first= be the code unit at index =position= within =string=.
+  4.  Let =cp= be the code point whose numeric value is that of =first=.
+  5.  If =first= is not a
+      [[https://tc39.es/ecma262/#leading-surrogate][leading surrogate]] or
+      [[https://tc39.es/ecma262/#trailing-surrogate][trailing surrogate]],
+      then
+
+      1. Return the
+         [[https://tc39.es/ecma262/#sec-list-and-record-specification-type][Record]]
+         { [[CodePoint]]: =cp=, [[CodeUnitCount]]: 1,
+         [[IsUnpairedSurrogate]]: false }.
+
+  6.  If =first= is a
+      [[https://tc39.es/ecma262/#trailing-surrogate][trailing surrogate]]
+      or =position= + 1 = =size=, then
+
+      1. Return the
+         [[https://tc39.es/ecma262/#sec-list-and-record-specification-type][Record]]
+         { [[CodePoint]]: =cp=, [[CodeUnitCount]]: 1,
+         [[IsUnpairedSurrogate]]: true }.
+
+  7.  Let =second= be the code unit at index =position= + 1 within
+      =string=.
+  8.  If =second= is not a
+      [[https://tc39.es/ecma262/#trailing-surrogate][trailing surrogate]],
+      then
+
+      1. Return the
+         [[https://tc39.es/ecma262/#sec-list-and-record-specification-type][Record]]
+         { [[CodePoint]]: =cp=, [[CodeUnitCount]]: 1,
+         [[IsUnpairedSurrogate]]: true }.
+
+  9.  Set =cp= to
+      ! [[https://tc39.es/ecma262/#sec-utf16decode][UTF16Decode]](=first=,
+      =second=).
+  10. Return the
+      [[https://tc39.es/ecma262/#sec-list-and-record-specification-type][Record]]
+      { [[CodePoint]]: =cp=, [[CodeUnitCount]]: 2,
+      [[IsUnpairedSurrogate]]: false }.
+
+** Types of Source Code
+   :PROPERTIES:
+   :CUSTOM_ID: types-of-source-code
+   :END:
+
+ There are four types of ECMAScript code:
+
+ - /Global code/ is source text that is treated as an ECMAScript
+   [[https://tc39.es/ecma262/#prod-Script][Script]]. The global code of a
+   particular [[https://tc39.es/ecma262/#prod-Script][Script]] does not
+   include any source text that is parsed as part of a
+   [[https://tc39.es/ecma262/#prod-FunctionDeclaration][FunctionDeclaration]],
+   [[https://tc39.es/ecma262/#prod-FunctionExpression][FunctionExpression]],
+   [[https://tc39.es/ecma262/#prod-GeneratorDeclaration][GeneratorDeclaration]],
+   [[https://tc39.es/ecma262/#prod-GeneratorExpression][GeneratorExpression]],
+   [[https://tc39.es/ecma262/#prod-AsyncFunctionDeclaration][AsyncFunctionDeclaration]],
+   [[https://tc39.es/ecma262/#prod-AsyncFunctionExpression][AsyncFunctionExpression]],
+   [[https://tc39.es/ecma262/#prod-AsyncGeneratorDeclaration][AsyncGeneratorDeclaration]],
+   [[https://tc39.es/ecma262/#prod-AsyncGeneratorExpression][AsyncGeneratorExpression]],
+   [[https://tc39.es/ecma262/#prod-MethodDefinition][MethodDefinition]],
+   [[https://tc39.es/ecma262/#prod-ArrowFunction][ArrowFunction]],
+   [[https://tc39.es/ecma262/#prod-AsyncArrowFunction][AsyncArrowFunction]],
+   [[https://tc39.es/ecma262/#prod-ClassDeclaration][ClassDeclaration]],
+   or [[https://tc39.es/ecma262/#prod-ClassExpression][ClassExpression]].
+
+ - /Eval code/ is the source text supplied to the built-in =eval=
+   function. More precisely, if the parameter to the built-in =eval=
+   function is a String, it is treated as an ECMAScript
+   [[https://tc39.es/ecma262/#prod-Script][Script]]. The eval code for a
+   particular invocation of =eval= is the global code portion of that
+   [[https://tc39.es/ecma262/#prod-Script][Script]].
+
+ - /Function code/ is source text that is parsed to supply the value of
+   the [[ECMAScriptCode]] and [[FormalParameters]] internal slots (see
+   [[https://tc39.es/ecma262/#sec-ecmascript-function-objects][9.2]]) of
+   an ECMAScript [[https://tc39.es/ecma262/#function-object][function
+   object]]. The function code of a particular ECMAScript function does
+   not include any source text that is parsed as the function code of a
+   nested
+   [[https://tc39.es/ecma262/#prod-FunctionDeclaration][FunctionDeclaration]],
+   [[https://tc39.es/ecma262/#prod-FunctionExpression][FunctionExpression]],
+   [[https://tc39.es/ecma262/#prod-GeneratorDeclaration][GeneratorDeclaration]],
+   [[https://tc39.es/ecma262/#prod-GeneratorExpression][GeneratorExpression]],
+   [[https://tc39.es/ecma262/#prod-AsyncFunctionDeclaration][AsyncFunctionDeclaration]],
+   [[https://tc39.es/ecma262/#prod-AsyncFunctionExpression][AsyncFunctionExpression]],
+   [[https://tc39.es/ecma262/#prod-AsyncGeneratorDeclaration][AsyncGeneratorDeclaration]],
+   [[https://tc39.es/ecma262/#prod-AsyncGeneratorExpression][AsyncGeneratorExpression]],
+   [[https://tc39.es/ecma262/#prod-MethodDefinition][MethodDefinition]],
+   [[https://tc39.es/ecma262/#prod-ArrowFunction][ArrowFunction]],
+   [[https://tc39.es/ecma262/#prod-AsyncArrowFunction][AsyncArrowFunction]],
+   [[https://tc39.es/ecma262/#prod-ClassDeclaration][ClassDeclaration]],
+   or [[https://tc39.es/ecma262/#prod-ClassExpression][ClassExpression]].
+
+   In addition, if the source text referred to above is parsed as:
+
+   - the
+     [[https://tc39.es/ecma262/#prod-FormalParameters][FormalParameters]]
+     and [[https://tc39.es/ecma262/#prod-FunctionBody][FunctionBody]] of
+     a
+     [[https://tc39.es/ecma262/#prod-FunctionDeclaration][FunctionDeclaration]]
+     or
+     [[https://tc39.es/ecma262/#prod-FunctionExpression][FunctionExpression]],
+   - the
+     [[https://tc39.es/ecma262/#prod-FormalParameters][FormalParameters]]
+     and [[https://tc39.es/ecma262/#prod-GeneratorBody][GeneratorBody]]
+     of a
+     [[https://tc39.es/ecma262/#prod-GeneratorDeclaration][GeneratorDeclaration]]
+     or
+     [[https://tc39.es/ecma262/#prod-GeneratorExpression][GeneratorExpression]],
+   - the
+     [[https://tc39.es/ecma262/#prod-FormalParameters][FormalParameters]]
+     and
+     [[https://tc39.es/ecma262/#prod-AsyncFunctionBody][AsyncFunctionBody]]
+     of an
+     [[https://tc39.es/ecma262/#prod-AsyncFunctionDeclaration][AsyncFunctionDeclaration]]
+     or
+     [[https://tc39.es/ecma262/#prod-AsyncFunctionExpression][AsyncFunctionExpression]],
+     or
+   - the
+     [[https://tc39.es/ecma262/#prod-FormalParameters][FormalParameters]]
+     and
+     [[https://tc39.es/ecma262/#prod-AsyncGeneratorBody][AsyncGeneratorBody]]
+     of an
+     [[https://tc39.es/ecma262/#prod-AsyncGeneratorDeclaration][AsyncGeneratorDeclaration]]
+     or
+     [[https://tc39.es/ecma262/#prod-AsyncGeneratorExpression][AsyncGeneratorExpression]],
+
+   then the source text matching the
+   [[https://tc39.es/ecma262/#prod-BindingIdentifier][BindingIdentifier]]
+   (if any) of that declaration or expression is also included in the
+   function code of the corresponding function.
+
+ - /Module code/ is source text that is code that is provided as a
+   [[https://tc39.es/ecma262/#prod-ModuleBody][ModuleBody]]. It is the
+   code that is directly evaluated when a module is initialized. The
+   module code of a particular module does not include any source text
+   that is parsed as part of a nested
+   [[https://tc39.es/ecma262/#prod-FunctionDeclaration][FunctionDeclaration]],
+   [[https://tc39.es/ecma262/#prod-FunctionExpression][FunctionExpression]],
+   [[https://tc39.es/ecma262/#prod-GeneratorDeclaration][GeneratorDeclaration]],
+   [[https://tc39.es/ecma262/#prod-GeneratorExpression][GeneratorExpression]],
+   [[https://tc39.es/ecma262/#prod-AsyncFunctionDeclaration][AsyncFunctionDeclaration]],
+   [[https://tc39.es/ecma262/#prod-AsyncFunctionExpression][AsyncFunctionExpression]],
+   [[https://tc39.es/ecma262/#prod-AsyncGeneratorDeclaration][AsyncGeneratorDeclaration]],
+   [[https://tc39.es/ecma262/#prod-AsyncGeneratorExpression][AsyncGeneratorExpression]],
+   [[https://tc39.es/ecma262/#prod-MethodDefinition][MethodDefinition]],
+   [[https://tc39.es/ecma262/#prod-ArrowFunction][ArrowFunction]],
+   [[https://tc39.es/ecma262/#prod-AsyncArrowFunction][AsyncArrowFunction]],
+   [[https://tc39.es/ecma262/#prod-ClassDeclaration][ClassDeclaration]],
+   or [[https://tc39.es/ecma262/#prod-ClassExpression][ClassExpression]].
+
+ Note 1
+
+ Function code is generally provided as the bodies of Function
+ Definitions
+ ([[https://tc39.es/ecma262/#sec-function-definitions][14.1]]), Arrow
+ Function Definitions
+ ([[https://tc39.es/ecma262/#sec-arrow-function-definitions][14.2]]),
+ Method Definitions
+ ([[https://tc39.es/ecma262/#sec-method-definitions][14.3]]), Generator
+ Function Definitions
+ ([[https://tc39.es/ecma262/#sec-generator-function-definitions][14.4]]),
+ Async Function Definitions
+ ([[https://tc39.es/ecma262/#sec-async-function-definitions][14.7]]),
+ Async Generator Function Definitions
+ ([[https://tc39.es/ecma262/#sec-async-generator-function-definitions][14.5]]),
+ and Async Arrow Functions
+ ([[https://tc39.es/ecma262/#sec-async-arrow-function-definitions][14.8]]).
+ Function code is also derived from the arguments to the =Function=
+ [[https://tc39.es/ecma262/#constructor][constructor]]
+ ([[https://tc39.es/ecma262/#sec-function-p1-p2-pn-body][19.2.1.1]]), the
+ =GeneratorFunction=
+ [[https://tc39.es/ecma262/#constructor][constructor]]
+ ([[https://tc39.es/ecma262/#sec-generatorfunction][25.2.1.1]]), and the
+ =AsyncFunction= [[https://tc39.es/ecma262/#constructor][constructor]]
+ ([[https://tc39.es/ecma262/#sec-async-function-constructor-arguments][25.7.1.1]]).
+
+ Note 2
+
+ The practical effect of including the
+ [[https://tc39.es/ecma262/#prod-BindingIdentifier][BindingIdentifier]]
+ in function code is that the Early Errors for
+ [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]] are
+ applied to a
+ [[https://tc39.es/ecma262/#prod-BindingIdentifier][BindingIdentifier]]
+ that is the name of a function whose body contains a "use strict"
+ directive, even if the surrounding code is not
+ [[https://tc39.es/ecma262/#sec-strict-mode-code][strict mode code]].
+
+*** Strict Mode Code
+    :PROPERTIES:
+    :CUSTOM_ID: strict-mode-code
+    :END:
+
+  An ECMAScript [[https://tc39.es/ecma262/#prod-Script][Script]] syntactic
+  unit may be processed using either unrestricted or strict mode syntax
+  and semantics. Code is interpreted as strict mode code in the following
+  situations:
+
+  - Global code is strict mode code if it begins with a
+    [[https://tc39.es/ecma262/#directive-prologue][Directive Prologue]]
+    that contains a [[https://tc39.es/ecma262/#use-strict-directive][Use
+    Strict Directive]].
+  - Module code is always strict mode code.
+  - All parts of a
+    [[https://tc39.es/ecma262/#prod-ClassDeclaration][ClassDeclaration]]
+    or a
+    [[https://tc39.es/ecma262/#prod-ClassExpression][ClassExpression]] are
+    strict mode code.
+  - Eval code is strict mode code if it begins with a
+    [[https://tc39.es/ecma262/#directive-prologue][Directive Prologue]]
+    that contains a [[https://tc39.es/ecma262/#use-strict-directive][Use
+    Strict Directive]] or if the call to =eval= is a
+    [[https://tc39.es/ecma262/#sec-function-calls-runtime-semantics-evaluation][direct
+    eval]] that is contained in strict mode code.
+  - Function code is strict mode code if the associated
+    [[https://tc39.es/ecma262/#prod-FunctionDeclaration][FunctionDeclaration]],
+    [[https://tc39.es/ecma262/#prod-FunctionExpression][FunctionExpression]],
+    [[https://tc39.es/ecma262/#prod-GeneratorDeclaration][GeneratorDeclaration]],
+    [[https://tc39.es/ecma262/#prod-GeneratorExpression][GeneratorExpression]],
+    [[https://tc39.es/ecma262/#prod-AsyncFunctionDeclaration][AsyncFunctionDeclaration]],
+    [[https://tc39.es/ecma262/#prod-AsyncFunctionExpression][AsyncFunctionExpression]],
+    [[https://tc39.es/ecma262/#prod-AsyncGeneratorDeclaration][AsyncGeneratorDeclaration]],
+    [[https://tc39.es/ecma262/#prod-AsyncGeneratorExpression][AsyncGeneratorExpression]],
+    [[https://tc39.es/ecma262/#prod-MethodDefinition][MethodDefinition]],
+    [[https://tc39.es/ecma262/#prod-ArrowFunction][ArrowFunction]], or
+    [[https://tc39.es/ecma262/#prod-AsyncArrowFunction][AsyncArrowFunction]]
+    is contained in strict mode code or if the code that produces the
+    value of the function's [[ECMAScriptCode]] internal slot begins with a
+    [[https://tc39.es/ecma262/#directive-prologue][Directive Prologue]]
+    that contains a [[https://tc39.es/ecma262/#use-strict-directive][Use
+    Strict Directive]].
+  - Function code that is supplied as the arguments to the built-in
+    =Function=, =Generator=, =AsyncFunction=, and =AsyncGenerator=
+    constructors is strict mode code if the last argument is a String that
+    when processed is a
+    [[https://tc39.es/ecma262/#prod-FunctionBody][FunctionBody]] that
+    begins with a [[https://tc39.es/ecma262/#directive-prologue][Directive
+    Prologue]] that contains a
+    [[https://tc39.es/ecma262/#use-strict-directive][Use Strict
+    Directive]].
+
+  ECMAScript code that is not strict mode code is called non-strict code.
+
+*** Non-ECMAScript Functions
+    :PROPERTIES:
+    :CUSTOM_ID: non-ecmascript-functions
+    :END:
+
+  An ECMAScript implementation may support the evaluation of function
+  exotic objects whose evaluative behaviour is expressed in some
+  implementation-defined form of executable code other than via ECMAScript
+  code. Whether a [[https://tc39.es/ecma262/#function-object][function
+  object]] is an ECMAScript code function or a non-ECMAScript function is
+  not semantically observable from the perspective of an ECMAScript code
+  function that calls or is called by such a non-ECMAScript function.
+
+** Copyright & Software License
+   :PROPERTIES:
+   :CUSTOM_ID: copyright-software-license
+   :END:
+
+ Ecma International
+
+ Rue du Rhone 114
+
+ CH-1204 Geneva
+
+ Tel: +41 22 849 6000
+
+ Fax: +41 22 849 6001
+
+ Web: [[https://ecma-international.org/]]
+
+*** Copyright Notice
+    :PROPERTIES:
+    :CUSTOM_ID: copyright-notice
+    :END:
+
+ © 2019 Ecma International
+
+ This draft document may be copied and furnished to others, and
+ derivative works that comment on or otherwise explain it or assist in
+ its implementation may be prepared, copied, published, and distributed,
+ in whole or in part, without restriction of any kind, provided that the
+ above copyright notice and this section are included on all such copies
+ and derivative works. However, this document itself may not be modified
+ in any way, including by removing the copyright notice or references to
+ Ecma International, except as needed for the purpose of developing any
+ document or deliverable produced by Ecma International.
+
+ This disclaimer is valid only prior to final version of this document.
+ After approval all rights on the standard are reserved by Ecma
+ International.
+
+ The limited permissions are granted through the standardization phase
+ and will not be revoked by Ecma International or its successors or
+ assigns during this time.
+
+ This document and the information contained herein is provided on an "AS
+ IS" basis and ECMA INTERNATIONAL DISCLAIMS ALL WARRANTIES, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTY THAT THE USE OF THE
+ INFORMATION HEREIN WILL NOT INFRINGE ANY OWNERSHIP RIGHTS OR ANY IMPLIED
+ WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+
+*** Software License
+    :PROPERTIES:
+    :CUSTOM_ID: software-license
+    :END:
+
+ All Software contained in this document ("Software") is protected by
+ copyright and is being made available under the "BSD License", included
+ below. This Software may be subject to third party rights (rights from
+ parties other than Ecma International), including patent rights, and no
+ licenses under such third party rights are granted under this license
+ even if the third party concerned is a member of Ecma International. SEE
+ THE ECMA CODE OF CONDUCT IN PATENT MATTERS AVAILABLE AT
+ https://ecma-international.org/memento/codeofconduct.htm FOR INFORMATION
+ REGARDING THE LICENSING OF PATENT CLAIMS THAT ARE REQUIRED TO IMPLEMENT
+ ECMA INTERNATIONAL STANDARDS.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ 3. Neither the name of the authors nor Ecma International may be used to
+    endorse or promote products derived from this software without
+    specific prior written permission.
+
+ THIS SOFTWARE IS PROVIDED BY THE ECMA INTERNATIONAL "AS IS" AND ANY
+ EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL ECMA INTERNATIONAL BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
+
+ <<references-pane-container>>
+
+ <<references-pane-spacer>>
+
+ <<references-pane>>
+
+ References to <<>><<references-pane-close>>
+
+ <<references-pane-table-container>>
+
+* <<SourceCharacter>>

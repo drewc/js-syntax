@@ -1,0 +1,19 @@
+#+TITLE: Customization, not everything is JS
+
+The very first line of our very first test parser contains an invalid token.
+Here's where we allow such things.
+
+#+begin_src gerbil :tangle "custom-token.ss"
+  (import :std/misc/list :drewc/smug)
+  (export #t)
+
+  (def HashtagLang (.let* ((_ "#lang ") (v (.read-line))) `(|#lang|, v)))
+
+  (def Annotation (.let* (a #\@) (return 'Annotation)))
+
+  (def custom-tokens [HashtagLang Annotation])
+
+  (def (lex-custom-tokens) (apply .or custom-tokens))
+
+  (def CustomToken (.let* (ct (lex-custom-tokens)) (return ct)))
+#+end_src

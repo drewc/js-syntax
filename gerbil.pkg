@@ -1,0 +1,1 @@
+(package: drewc/js-syntax depends: ("github.com/drewc/smug"))

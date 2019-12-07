@@ -1,0 +1,22 @@
+#+TITLE: js-syntax
+
+A Parser from ECMAScript -> Sexps
+
+
+* Usage  
+
+Just starting out, all we have is ~lexify~ which returns tokens as specified as
+[[file:lexical.org][Lexical]].
+
+#+begin_src gerbil
+  (import :std/misc/ports :drewc/js-syntax/lexical)
+
+  (def js-test-string (read-file-string "~/src/js-syntax/test/rps.glo"))
+
+  (def js-test-tokens (lexify js-test-string))
+
+  (delete-duplicates (map production-type (map token-production js-test-tokens))) 
+   ;; => '(|#lang| LineTerminator Comment IdentifierName WhiteSpace Punctuator
+   ;;    RightBracePunctuator NumericLiteral Annotation StringLiteral)
+
+#+end_src
