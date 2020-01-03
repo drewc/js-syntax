@@ -1,0 +1,27 @@
+(import :drewc/js-syntax :drewc/smug)
+(export #t)
+(def HashtagLang
+  (.let* ((_ "#lang ")
+          (v (many1 (sat (? (not (cut char=? <> #\newline)))))))
+    `(|#lang|, (list->string v))))
+(add-custom-token! HashtagLang)
+(def Annotation (.let* (a #\@) (return '(Annotation #\@))))
+(add-custom-token! Annotation)
+(defstruct (lang-declaration declaration) (contents))
+(def LangDeclaration
+  (.begin (peek (token-production-type? '|#lang|))
+          (.let* (t (item))
+            (return (lang-declaration (token-production-value t))))))
+(add-declaration! LangDeclaration)
+(defstruct (type-declaration declaration) (identifier))
+(defstruct (variant-type-declaration type-declaration) (variants)
+  transparent: #t)
+
+(def VariantTypeDeclaration
+  (.begin (tpv? "type")
+          (.let* ((name (tpv))
+                  (vs (.begin (tpv? #\=) (tpv? #\|)
+                              (sepby (tpv) (tpv? #\|))))
+                  (_ (tpv? #\;)))
+            (return (variant-type-declaration name vs)))))
+(add-declaration! VariantTypeDeclaration)

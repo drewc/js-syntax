@@ -1,0 +1,219 @@
+#+TITLE: Agenda
+#+PROPERTY: Effort_ALL 0 0:10 0:30 1:00 2:00 3:00 4:00 5:00 6:00 7:00
+#+SEQ_TODO:   TODO(t) INPROGRESS(i) WAITING(w@) | DONE(d) CANCELED(c@)
+#+BEGIN: clocktable :maxlevel 6 :scope file :link true :tstart "2019-11-25 Mon 00:11" 
+#+CAPTION: Clock summary at [2019-12-26 Thu 11:29]
+| Headline                                  |      Time |       |      |
+|-------------------------------------------+-----------+-------+------|
+| *Total time*                              | *2d 5:32* |       |      |
+|-------------------------------------------+-----------+-------+------|
+| [[file:/home/user/src/js-syntax/Agenda.org::Lexical%20Parser][Lexical Parser]]                            |      6:41 |       |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::%5B%5Bfile:lexical.org::#syntax-InputElementDiv%5D%5BInputElementDiv%5D%5D][InputElementDiv]]                       |           |  4:11 |      |
+| \_    [[file:/home/user/src/js-syntax/Agenda.org::Token%20struct][Token struct]]                        |           |       | 0:25 |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::Tokens->AST][Tokens->AST]]                           |           |  2:30 |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::Expressions][Expressions]]                               |     10:25 |       |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::AssigmentExpression][AssigmentExpression]]                   |           |  8:20 |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::Type%20Statement][Type Statement]]                        |           |  0:25 |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::Statements%20and%20Declarations][Statements and Declarations]]               |      1:40 |       |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::BindingElement][BindingElement]]                        |           |  0:25 |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::Function%20and%20Classes][Function and Classes]]                      |      2:56 |       |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::~rps.glo~][~rps.glo~]]                                 |      6:41 |       |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::glow.ss][glow.ss]]                               |           |  1:40 |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::Scripts%20and%20Modules][Scripts and Modules]]                       |      0:25 |       |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::Meetings][Meetings]]                                  |      4:10 |       |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::Syntax%20Discussion%202019-12-08][Syntax Discussion 2019-12-08]]          |           |  4:10 |      |
+| [[file:/home/user/src/js-syntax/Agenda.org::SMUG][SMUG]]                                      |     20:34 |       |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::Improve%20parser%20to%20work%20with%20Tokens%20and%20document%20it][Improve parser to work with Tokens...]] |           | 18:28 |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::/file/%20tokens.ss][/file/ tokens.ss]]                      |           |  1:16 |      |
+| \_  [[file:/home/user/src/js-syntax/Agenda.org::Syntax/Compile%20issues][Syntax/Compile issues]]                 |           |  0:25 |      |
+#+END
+* Lexical Parser 
+  SCHEDULED: <2019-12-06 Fri>
+  :PROPERTIES:
+  :Effort:   5:00
+  :END:
+
+** [[file:lexical.org::#syntax-InputElementDiv][InputElementDiv]]
+   :LOGBOOK:
+   CLOCK: [2019-12-07 Sat 13:18]--[2019-12-07 Sat 13:43] =>  0:25
+   CLOCK: [2019-12-07 Sat 12:06]--[2019-12-07 Sat 12:32] =>  0:26
+   CLOCK: [2019-12-07 Sat 10:13]--[2019-12-07 Sat 10:38] =>  0:25
+   CLOCK: [2019-12-06 Fri 20:49]--[2019-12-06 Fri 21:14] =>  0:25
+   CLOCK: [2019-12-06 Fri 18:51]--[2019-12-06 Fri 19:16] =>  0:25
+   CLOCK: [2019-12-06 Fri 17:13]--[2019-12-06 Fri 17:38] =>  0:25
+   CLOCK: [2019-12-06 Fri 16:40]--[2019-12-06 Fri 17:05] =>  0:25
+   CLOCK: [2019-12-06 Fri 15:59]--[2019-12-06 Fri 16:24] =>  0:25
+   CLOCK: [2019-12-06 Fri 15:29]--[2019-12-06 Fri 15:54] =>  0:25
+   :END:
+
+   This parser contains all the lexical data.
+
+*** TODO StringLiteral 
+   - single quotes
+   - \[[EscapeSequence][EscapeSequence]]
+   - [[LineContinuation][LineContinuation]]
+   - [ ] 
+
+
+
+*** Token struct
+    :LOGBOOK:
+    CLOCK: [2019-12-09 Mon 12:31]--[2019-12-09 Mon 12:56] =>  0:25
+    :END:
+
+** Tokens->AST
+   :LOGBOOK:
+   CLOCK: [2019-12-22 Sun 14:48]--[2019-12-22 Sun 15:13] =>  0:25
+   CLOCK: [2019-12-22 Sun 14:12]--[2019-12-22 Sun 14:37] =>  0:25
+   CLOCK: [2019-12-22 Sun 13:22]--[2019-12-22 Sun 13:47] =>  0:25
+   CLOCK: [2019-12-15 Sun 13:33]--[2019-12-15 Sun 13:58] =>  0:25
+   CLOCK: [2019-12-15 Sun 12:56]--[2019-12-15 Sun 13:21] =>  0:25
+   CLOCK: [2019-12-15 Sun 12:25]--[2019-12-15 Sun 12:50] =>  0:25
+   :END:
+* Expressions
+  :LOGBOOK:
+  CLOCK: [2019-12-24 Tue 15:15]--[2019-12-24 Tue 15:40] =>  0:25
+  CLOCK: [2019-12-18 Wed 12:11]--[2019-12-18 Wed 12:36] =>  0:25
+  CLOCK: [2019-12-16 Mon 08:03]--[2019-12-16 Mon 08:28] =>  0:25
+  CLOCK: [2019-12-07 Sat 15:03]--[2019-12-07 Sat 15:28] =>  0:25
+  :END:
+** AssigmentExpression
+   :LOGBOOK:
+   CLOCK: [2019-12-24 Tue 14:16]--[2019-12-24 Tue 14:41] =>  0:25
+   CLOCK: [2019-12-24 Tue 13:28]--[2019-12-24 Tue 13:53] =>  0:25
+   CLOCK: [2019-12-24 Tue 12:52]--[2019-12-24 Tue 13:17] =>  0:25
+   CLOCK: [2019-12-23 Mon 16:22]--[2019-12-23 Mon 16:47] =>  0:25
+   CLOCK: [2019-12-23 Mon 12:46]--[2019-12-23 Mon 13:11] =>  0:25
+   CLOCK: [2019-12-23 Mon 12:03]--[2019-12-23 Mon 12:28] =>  0:25
+   CLOCK: [2019-12-22 Sun 18:23]--[2019-12-22 Sun 18:48] =>  0:25
+   CLOCK: [2019-12-22 Sun 17:52]--[2019-12-22 Sun 18:17] =>  0:25
+   CLOCK: [2019-12-22 Sun 17:13]--[2019-12-22 Sun 17:38] =>  0:25
+   CLOCK: [2019-12-22 Sun 16:38]--[2019-12-22 Sun 17:03] =>  0:25
+   CLOCK: [2019-12-22 Sun 15:50]--[2019-12-22 Sun 16:15] =>  0:25
+   CLOCK: [2019-12-22 Sun 15:19]--[2019-12-22 Sun 15:44] =>  0:25
+   CLOCK: [2019-12-22 Sun 12:51]--[2019-12-22 Sun 13:16] =>  0:25
+   CLOCK: [2019-12-22 Sun 12:08]--[2019-12-22 Sun 12:33] =>  0:25
+   CLOCK: [2019-12-22 Sun 11:17]--[2019-12-22 Sun 11:42] =>  0:25
+   CLOCK: [2019-12-21 Sat 14:12]--[2019-12-21 Sat 14:37] =>  0:25
+   CLOCK: [2019-12-21 Sat 12:01]--[2019-12-21 Sat 12:26] =>  0:25
+   CLOCK: [2019-12-16 Mon 15:20]--[2019-12-16 Mon 15:45] =>  0:25
+   CLOCK: [2019-12-16 Mon 09:32]--[2019-12-16 Mon 09:57] =>  0:25
+   CLOCK: [2019-12-16 Mon 08:57]--[2019-12-16 Mon 09:22] =>  0:25
+   :END:
+** Type Statement
+   :LOGBOOK:
+   CLOCK: [2019-12-18 Wed 12:46]--[2019-12-18 Wed 13:11] =>  0:25
+   :END:
+* Statements and Declarations
+  :LOGBOOK:
+  CLOCK: [2019-12-16 Mon 14:12]--[2019-12-16 Mon 14:37] =>  0:25
+  CLOCK: [2019-12-16 Mon 10:39]--[2019-12-16 Mon 11:04] =>  0:25
+  CLOCK: [2019-12-08 Sun 18:14]--[2019-12-08 Sun 18:39] =>  0:25
+  :END:
+** BindingElement
+   :LOGBOOK:
+   CLOCK: [2019-12-20 Fri 18:08]--[2019-12-20 Fri 18:33] =>  0:25
+   :END:
+* Function and Classes
+  :LOGBOOK:
+  CLOCK: [2019-12-21 Sat 09:31]--[2019-12-21 Sat 09:56] =>  0:25
+  CLOCK: [2019-12-20 Fri 19:39]--[2019-12-20 Fri 20:04] =>  0:25
+  CLOCK: [2019-12-16 Mon 12:51]--[2019-12-16 Mon 13:16] =>  0:25
+  CLOCK: [2019-12-16 Mon 12:20]--[2019-12-16 Mon 12:46] =>  0:26
+  CLOCK: [2019-12-15 Sun 18:36]--[2019-12-15 Sun 19:01] =>  0:25
+  CLOCK: [2019-12-15 Sun 17:27]--[2019-12-15 Sun 17:52] =>  0:25
+  CLOCK: [2019-12-15 Sun 16:51]--[2019-12-15 Sun 17:16] =>  0:25
+  :END:
+* ~rps.glo~
+  :LOGBOOK:
+  CLOCK: [2019-12-20 Fri 15:16]--[2019-12-20 Fri 15:41] =>  0:25
+  CLOCK: [2019-12-20 Fri 12:11]--[2019-12-20 Fri 12:36] =>  0:25
+  CLOCK: [2019-12-19 Thu 10:36]--[2019-12-19 Thu 11:01] =>  0:25
+  CLOCK: [2019-12-18 Wed 18:37]--[2019-12-18 Wed 19:02] =>  0:25
+  CLOCK: [2019-12-18 Wed 17:47]--[2019-12-18 Wed 18:12] =>  0:25
+  CLOCK: [2019-12-18 Wed 16:24]--[2019-12-18 Wed 16:50] =>  0:26
+  CLOCK: [2019-12-18 Wed 11:29]--[2019-12-18 Wed 11:54] =>  0:25
+  CLOCK: [2019-12-18 Wed 10:57]--[2019-12-18 Wed 11:22] =>  0:25
+  CLOCK: [2019-12-17 Tue 18:50]--[2019-12-17 Tue 19:15] =>  0:25
+  CLOCK: [2019-12-17 Tue 11:09]--[2019-12-17 Tue 11:34] =>  0:25
+  CLOCK: [2019-12-16 Mon 17:02]--[2019-12-16 Mon 17:27] =>  0:25
+  CLOCK: [2019-12-16 Mon 16:24]--[2019-12-16 Mon 16:49] =>  0:25
+  :END:
+** glow.ss 
+   :LOGBOOK:
+   CLOCK: [2019-12-20 Fri 14:20]--[2019-12-20 Fri 14:45] =>  0:25
+   CLOCK: [2019-12-20 Fri 13:27]--[2019-12-20 Fri 13:52] =>  0:25
+   CLOCK: [2019-12-19 Thu 11:23]--[2019-12-19 Thu 11:48] =>  0:25
+   CLOCK: [2019-12-19 Thu 09:34]--[2019-12-19 Thu 09:59] =>  0:25
+   :END:
+* Scripts and Modules
+  :LOGBOOK:
+  CLOCK: [2019-12-18 Wed 13:49]--[2019-12-18 Wed 14:14] =>  0:25
+  :END:
+* Meetings
+** Syntax Discussion 2019-12-08
+   :LOGBOOK:
+   CLOCK: [2019-12-08 Sun 11:59]--[2019-12-08 Sun 16:09] =>  4:10
+   :END:
+* SMUG 
+  :LOGBOOK:
+  CLOCK: [2019-12-11 Wed 10:31]--[2019-12-11 Wed 10:56] =>  0:25
+  :END:
+** Improve parser to work with Tokens and document it
+   :LOGBOOK:
+   CLOCK: [2019-12-15 Sun 16:16]--[2019-12-15 Sun 16:41] =>  0:25
+   CLOCK: [2019-12-14 Sat 15:42]--[2019-12-14 Sat 16:07] =>  0:25
+   CLOCK: [2019-12-14 Sat 14:46]--[2019-12-14 Sat 15:11] =>  0:25
+   CLOCK: [2019-12-14 Sat 14:00]--[2019-12-14 Sat 14:25] =>  0:25
+   CLOCK: [2019-12-14 Sat 13:16]--[2019-12-14 Sat 13:41] =>  0:25
+   CLOCK: [2019-12-13 Fri 15:29]--[2019-12-13 Fri 15:54] =>  0:25
+   CLOCK: [2019-12-13 Fri 13:28]--[2019-12-13 Fri 13:53] =>  0:25
+   CLOCK: [2019-12-13 Fri 12:47]--[2019-12-13 Fri 13:12] =>  0:25
+   CLOCK: [2019-12-13 Fri 11:10]--[2019-12-13 Fri 11:35] =>  0:25
+   CLOCK: [2019-12-13 Fri 10:32]--[2019-12-13 Fri 10:57] =>  0:25
+   CLOCK: [2019-12-12 Thu 21:19]--[2019-12-12 Thu 21:44] =>  0:25
+   CLOCK: [2019-12-12 Thu 21:12]--[2019-12-12 Thu 21:19] =>  0:07
+   CLOCK: [2019-12-12 Thu 20:18]--[2019-12-12 Thu 20:43] =>  0:25
+   CLOCK: [2019-12-12 Thu 18:54]--[2019-12-12 Thu 19:19] =>  0:25
+   CLOCK: [2019-12-12 Thu 18:19]--[2019-12-12 Thu 18:44] =>  0:25
+   CLOCK: [2019-12-12 Thu 17:07]--[2019-12-12 Thu 17:32] =>  0:25
+   CLOCK: [2019-12-12 Thu 16:30]--[2019-12-12 Thu 16:55] =>  0:25
+   CLOCK: [2019-12-12 Thu 12:40]--[2019-12-12 Thu 13:05] =>  0:25
+   CLOCK: [2019-12-12 Thu 12:03]--[2019-12-12 Thu 12:28] =>  0:25
+   CLOCK: [2019-12-12 Thu 11:17]--[2019-12-12 Thu 11:42] =>  0:25
+   CLOCK: [2019-12-12 Thu 09:31]--[2019-12-12 Thu 09:56] =>  0:25
+   CLOCK: [2019-12-11 Wed 14:24]--[2019-12-11 Wed 14:49] =>  0:25
+   CLOCK: [2019-12-11 Wed 13:15]--[2019-12-11 Wed 13:40] =>  0:25
+   CLOCK: [2019-12-11 Wed 12:45]--[2019-12-11 Wed 13:10] =>  0:25
+   CLOCK: [2019-12-11 Wed 12:08]--[2019-12-11 Wed 12:33] =>  0:25
+   CLOCK: [2019-12-10 Tue 21:59]--[2019-12-10 Tue 22:24] =>  0:25
+   CLOCK: [2019-12-10 Tue 21:29]--[2019-12-10 Tue 21:54] =>  0:25
+   CLOCK: [2019-12-10 Tue 20:54]--[2019-12-10 Tue 21:19] =>  0:25
+   CLOCK: [2019-12-10 Tue 19:40]--[2019-12-10 Tue 20:06] =>  0:26
+   CLOCK: [2019-12-10 Tue 18:48]--[2019-12-10 Tue 19:13] =>  0:25
+   CLOCK: [2019-12-10 Tue 17:05]--[2019-12-10 Tue 17:30] =>  0:25
+   CLOCK: [2019-12-10 Tue 15:58]--[2019-12-10 Tue 16:23] =>  0:25
+   CLOCK: [2019-12-10 Tue 13:54]--[2019-12-10 Tue 14:19] =>  0:25
+   CLOCK: [2019-12-10 Tue 13:01]--[2019-12-10 Tue 13:26] =>  0:25
+   CLOCK: [2019-12-10 Tue 12:19]--[2019-12-10 Tue 12:44] =>  0:25
+   CLOCK: [2019-12-10 Tue 10:49]--[2019-12-10 Tue 11:14] =>  0:25
+   CLOCK: [2019-12-09 Mon 22:37]--[2019-12-09 Mon 23:02] =>  0:25
+   CLOCK: [2019-12-09 Mon 22:00]--[2019-12-09 Mon 22:25] =>  0:25
+   CLOCK: [2019-12-09 Mon 19:08]--[2019-12-09 Mon 19:33] =>  0:25
+   CLOCK: [2019-12-09 Mon 17:45]--[2019-12-09 Mon 18:10] =>  0:25
+   CLOCK: [2019-12-09 Mon 17:12]--[2019-12-09 Mon 17:37] =>  0:25
+   CLOCK: [2019-12-09 Mon 13:57]--[2019-12-09 Mon 14:22] =>  0:25
+   CLOCK: [2019-12-09 Mon 13:07]--[2019-12-09 Mon 13:32] =>  0:25
+   CLOCK: [2019-12-09 Mon 11:12]--[2019-12-09 Mon 11:37] =>  0:25
+   CLOCK: [2019-12-08 Sun 19:38]--[2019-12-08 Sun 20:03] =>  0:25
+   :END:
+** /file/ tokens.ss
+   :LOGBOOK:
+   CLOCK: [2019-12-17 Tue 16:13]--[2019-12-17 Tue 16:39] =>  0:26
+   CLOCK: [2019-12-17 Tue 13:29]--[2019-12-17 Tue 13:54] =>  0:25
+   CLOCK: [2019-12-17 Tue 12:09]--[2019-12-17 Tue 12:34] =>  0:25
+   :END:
+** [#B] Syntax/Compile issues
+   :LOGBOOK:
+   CLOCK: [2019-12-18 Wed 08:53]--[2019-12-18 Wed 09:18] =>  0:25
+   :END:

@@ -1,0 +1,139 @@
+#+TITLE: Literal Numbers, not so literal!
+
+#+begin_src gerbil
+  (import :drewc/js-syntax :std/test)
+#+end_src
+
+One of the very first things I did was make a [[file:lexical.org::#numeric-literals][NumericLiteral]] lexical token. When
+trying to parse a [[file:statements-and-declarations.org::#StatementList][StatementList]], which contains every single token in it, I was
+waiting for a number to pop up as all my test files had them.
+
+It turns out that the parser to run to get a ~numeric-literal~ syntax leaf out
+of it is ~AssigmentExpression~. This is so it can assign to itself, essentially.b
+
+Wait, what? Well, when drilling down to the very end of what it produces, a
+~Literal~ is one of the items.
+
+#+begin_src gerbil
+  (def numeric-tokens (lexify "42"))
+#+end_src
+
+ Assignment -> Conditional -> LogicalOr -> LogicalAnd -> Bitwise(Or -> Xor ->
+ And) -> Equality -> Relational -> Shift -> Add -> Mult -> Exponential -> Unary
+ -> Update -> LHS -> New -> Member -> Primary -> Literal -> NumericToken
+
+
+* Literal
+
+We'll go from Bottom Up.
+
+#+begin_src gerbil
+  (def n-literal (run Literal numeric-tokens))
+
+  (check-predicate n-literal numeric-literal?)
+  (check (literal-value n-literal) => "42")
+#+end_src
+
+* PrimaryExpression
+
+#+begin_src gerbil
+  (def n-primary (run PrimaryExpression numeric-tokens))
+
+  (check-predicate n-primary numeric-literal?)
+  (check (literal-value n-literal) => "42")
+  (check (literal-value n-literal) => (literal-value n-primary))
+#+end_src
+
+* MemberExpression
+
+Member expressions are a.way[to].look_at_contents. 
+
+We'll test that here as well.
+
+First, numeric literal.
+
+#+begin_src gerbil 
+  (def n-member (run MemberExpression numeric-tokens))
+  (check-predicate n-member numeric-literal?)
+  (check (literal-value n-member) => "42")
+#+end_src
+
+Now, the ~.~ operand. 
+
+#+begin_src gerbil 
+  (def member-tokens (lexify "a.way.to.look_at_contents"))
+
+  (def member-test (run MemberExpression member-tokens))
+
+  (check (identifier-name
+          (identifier-reference-identifier (member-expression-group member-test)))
+         =>"a")
+
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-group
+             (member-expression-identifier member-test))))
+         =>"way")
+
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-group
+            (member-expression-identifier
+             (member-expression-identifier member-test)))))
+         =>"to")
+
+  (check (identifier-name
+          (identifier-reference-identifier
+            (member-expression-identifier
+            (member-expression-identifier
+             (member-expression-identifier member-test)))))
+         =>"look_at_contents")
+
+  (def amember-tokens (lexify "an.array[way].to.look_at_contents"))
+  (def amember-test (run MemberExpression amember-tokens))
+
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-group 
+            (member-expression-group amember-test))))
+         =>"an")
+
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-group 
+            (member-expression-identifier 
+             (member-expression-group amember-test)))))
+         =>"array")
+  ;;; This is where it's expression, not identifier.
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-expression
+            (member-expression-identifier 
+             (member-expression-group amember-test)))))
+         =>"way")
+
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-group
+             (member-expression-identifier amember-test))))
+         =>"to")
+
+  (check (identifier-name
+          (identifier-reference-identifier
+           (member-expression-identifier
+             (member-expression-identifier amember-test))))
+         =>"look_at_contents")
+
+
+
+#+end_src
+
+* New Expression
+
+
+#+begin_src gerbil 
+  (import :drewc/js-syntax :std/test :drewc/smug)
+
+
+
+#+end_src

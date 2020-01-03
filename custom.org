@@ -3,17 +3,39 @@
 The very first line of our very first test parser contains an invalid token.
 Here's where we allow such things.
 
-#+begin_src gerbil :tangle "custom-token.ss"
+
+
+#+begin_src gerbil :tangle custom.ss
   (import :std/misc/list :drewc/smug)
   (export #t)
 
-  (def HashtagLang (.let* ((_ "#lang ") (v (.read-line))) `(|#lang|, v)))
+  (def custom-tokens [FAIL])
+  (def (add-custom-token! p) (push! p custom-tokens))
+  (def (parse-custom-tokens) (apply .or custom-tokens))
+  (defsyntax (CustomToken stx)
+    (syntax-case stx ()
+      ((macro arg) #'((parse-custom-tokens) arg))
+      (sym #'(parse-custom-tokens))))
 
-  (def Annotation (.let* (a #\@) (return 'Annotation)))
 
-  (def custom-tokens [HashtagLang Annotation])
+  (def custom-statements [FAIL])
+  (def (add-custom-statement! p) (push! p custom-statements))
+  (def (parse-custom-statements) (apply .or custom-statements))
+  (defsyntax (CustomStatement stx)
+    (syntax-case stx ()
+      ((macro arg) #'((parse-custom-statements) arg))
+      (sym #'(parse-custom-statements))))
 
-  (def (lex-custom-tokens) (apply .or custom-tokens))
 
-  (def CustomToken (.let* (ct (lex-custom-tokens)) (return ct)))
+  (def custom-declarations [FAIL])
+  (def (add-custom-declaration! p) (push! p custom-declarations))
+  (def (parse-custom-declarations) (.begin (apply .or custom-declarations)))
+  (defsyntax (CustomDeclaration stx)
+    (syntax-case stx ()
+      ((macro arg) #'((parse-custom-declarations) arg))
+      (sym #'(parse-custom-declarations))))
+
 #+end_src
+
+
+

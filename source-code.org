@@ -1,3 +1,4 @@
+#+TITLE: Source Code
 
 
 * ECMAScript Language: Source Code
@@ -26,6 +27,7 @@
 
    (def SourceCharacter (item))
  #+end_src
+
  ECMAScript code is expressed using Unicode. ECMAScript source text is a
  sequence of code points. All Unicode code point values from U+0000 to U+10FFFF,
  including surrogate code points, may occur in source text where permitted by
@@ -47,6 +49,7 @@
 
  In string literals, regular expression literals, template literals and
  identifiers, any Unicode code point may also be expressed using Unicode
+
  escape sequences that explicitly express a code point's numeric value.
  Within a comment, such an escape sequence is effectively ignored as part
  of the comment.

@@ -1,63 +1,153 @@
 #+TITLE: Lexps: Lexical parsing JS to Symbolic-Expressions
 #+SEQ_TODO:   TODO(t) INPROGRESS(i) WAITING(w@) | DONE(d) CANCELED(c@)
 
+* Introduction  
+  :PROPERTIES:
+  :header-args: :noweb-ref token-test
+  :END:
+
 Starting with source code, we break everything up into tokens.
 
 #+begin_src gerbil :noweb-ref Token
-  (def Token
-    (.let* ((b (point))
-            (t (.or InputElementDiv CustomToken 
-                 (.begin (.not (item)) (return #!eof))
-                 (lex-error "Invalid Token")))
-            (e (point)))
-      (if (eof-object? t) (fail)
-          `(Token ,[begin: b end: e] ,t))))
+  (def (lex-error c . args)
+    (.let* (p (point)) (apply error "Invalid Token:" c "at" (1- p) args)))
 
-  (def (token? v) (and (pair? v) (eq? 'Token (car v)) (= 3 (length v))))
-  (def (token-prop t k) (and (token? t) (pgetq k (cadr t))))
-  (def (token-production t) (and (token? t) (caddr t)))
+  (def JSToken
+    (.or (.begin #!void (Token CustomToken InputElementDiv))
+         (.let* (v (.or #!eof ITEM)) (if (eof-object? v) FAIL (lex-error v)))))
+
 #+end_src
 
-The ~token-production~ is what the lexer produces as the token.
+** Token Production
+ The ~token-value~ is what the lexer produces as the token.
 
-#+begin_src gerbil :noweb-ref production
-  (def (production? p) (or (symbol? p) (and (pair? p) (symbol? (car p)))))
-  (def (production-type p) (and (production? p) (if (pair? p) (car p) p)))
-#+end_src
+ #+begin_src gerbil :noweb-ref production
+   (def (production? p) (or (symbol? p) (and (pair? p) (symbol? (car p)))))
+   (def (token-production t) (let (v (token-value t)) (and (production? v) v)))
+   (def (production-type p) (and (production? p) (if (pair? p) (car p) p)))
+   (def (production-value p) (and (production? p) (if (pair? p) (cadr p) p)))
+   (def (token-production-type t)
+     (let (v (token-production t)) (and v (production-type v))))
+   (def (token-production-value (t #f))
+     (def (tpv tk)  
+       (let (v (token-production tk)) (and v (production-value v))))
+     (if t (tpv t) (.let* (t (item)) (return (token-production-value t)))))
+   (def (token-production-type? p) (token-reader? p token-production-type))
+   (def (token-production-value? p) (token-reader? p token-production-value))
 
-So, to ~tokenize~ a string, we break into tokens.
+   (defalias tpv token-production-value)
+   (defalias tpv? token-production-value?)
+   (defalias tpt? token-production-type?)
 
-#+begin_src gerbil :noweb-ref Token
-  (def (tokenize str) (run (many1 Token) str))
-#+end_src
+ #+end_src
 
-To test it out, we have a file.
+** Tokenize
 
-#+begin_src gerbil
-  (import :std/misc/ports :drewc/js-syntax/lexical :drewc/smug :std/srfi/1 :std/test)
+ So, to ~tokenize~ a string, we break into tokens.
 
-  (def js-test-string (read-file-string "~/src/js-syntax/test/rps.glo"))
-  (def js-test-tokens (tokenize js-test-string))
-#+end_src
+ #+begin_src gerbil :noweb-ref Token
+   (def (tokenize str) (run (many1 JSToken) str))
+ #+end_src
 
-That file has the following productions.
+ To test it out, we have a file.
 
-#+begin_src gerbil
-  (check (delete-duplicates (map production-type (map token-production js-test-tokens)))
-   => '(|#lang| LineTerminator Comment IdentifierName WhiteSpace Punctuator
-        RightBracePunctuator NumericLiteral Annotation StringLiteral))
-#+end_src
+ #+begin_src gerbil
+   (def js-test-string (read-file-string "~/src/js-syntax/test/rps.glo"))
+ #+end_src
 
-Our parsing of the tokens cares not for ~Comment~'s or ~WhiteSpace~, so we'll
-~lexify~ things.
 
-#+begin_src gerbil :noweb-ref lexify
-  (def (lexify thing)
-    (def tokens (if (list? thing) thing (tokenize thing)))
-    (filter (lambda (t) (let (pt (production-type (token-production t)))
-                     (not (member pt '(Comment WhiteSpace)))))
-            tokens))
-#+end_src
+ #+begin_src gerbil :noweb-ref /dev/null
+   (def js-test-tokens (tokenize js-test-string)) 
+     ;;=> Invalid Token: #\# "at" 0
+ #+end_src
+
+ That immediately errors as our file has a ~#lang glow\n~ to start it off. That is
+ not a valid ECMAScript token.
+
+
+** Custom Tokens
+
+ #+begin_src gerbil
+   (def HashtagLang
+     (.let* ((_ "#lang ")
+             (v (many1 (sat (? (not (cut char=? <> #\newline)))))))
+       `(|#lang|, (list->string v))))
+   (add-custom-token! HashtagLang)
+ #+end_src
+ That still failed. As luck would have it, the entire reasoning behind the first
+ round of ~js-syntax~ in gerbil is custom things on top of JS. Testing it out.
+
+ #+begin_src gerbil :noweb-ref /dev/null
+   (def js-test-tokens (tokenize js-test-string)) 
+     ;;=> Invalid Token: #\@ "at" 863
+ #+end_src
+
+ #+begin_src gerbil
+   (def Annotation (.let* (a #\@) (return `(Annotation ,a))))
+   (add-custom-token! Annotation)
+ #+end_src
+
+ Now it succeeds.
+
+ #+begin_src gerbil
+   (def js-test-tokens (tokenize js-test-string)) 
+ #+end_src
+
+ That file has the following productions.
+
+ #+begin_src gerbil
+   (check (delete-duplicates (map token-production-type js-test-tokens))
+          => '(|#lang| LineTerminator Comment IdentifierName
+               WhiteSpace Punctuator NumericLiteral RightBracePunctuator
+               Annotation StringLiteral))
+ #+end_src
+
+** Lexify: ~lex-tokens~
+   :PROPERTIES:
+   :CUSTOM_ID: lexify-and-lex-tokens
+   :END:
+
+ Most of the token parsing cares not for ~Comment~'s or ~WhiteSpace~ or
+ ~LineTerminator~'s, so we'll ~lexify~ things. We'll put all "valid" tokens in a
+ vector, yet keep the original list.
+
+ #+begin_src gerbil :noweb-ref lexify
+   (defstruct lex-tokens (vector list) transparent: #t)
+   (defmethod (input-item (ts lex-tokens)) (input-item (String 0 ts)))
+   (defmethod (input-item-ref (t lex-tokens) (n <t>))
+     (input-item-ref (lex-tokens-vector t) n))
+
+   (def (lexify thing (rem '(Comment WhiteSpace LineTerminator)))
+     (def tokens (if (list? thing) thing (tokenize thing)))
+     (let (v (filter (lambda (t) (let (pt (production-type (token-production t)))
+                              (not (member pt rem)))) tokens))
+       (lex-tokens (list->vector v) tokens)))
+ #+end_src
+
+ Now most of the time we care not, but when we need to, we can see the ~next-source-tokens~
+
+ #+begin_src gerbil :noweb-ref lexify
+   (def (.lex-tokens)
+     (lambda (i) ((return (if (String? i) (String-thing i) i)) i)))
+
+   (def (next-source-tokens)
+     (peek (.let* ((p (point))
+                   (t (.begin (goto-char (1- p)) (item)))
+                   (lts (.lex-tokens))
+                   (l (lex-tokens-list lts))
+                   (m (member t l)))
+             (if m (cdr m) #f))))
+ #+end_src
+
+ #+begin_src gerbil 
+   (def js-test-lexemes (lexify js-test-tokens))
+ #+end_src
+
+ #+begin_src gerbil
+   (check (delete-duplicates (map token-production-type js-test-lexemes))
+          => '(|#lang| IdentifierName Punctuator NumericLiteral
+               RightBracePunctuator Annotation StringLiteral))
+ #+end_src
 
 * Abbreviations 
 
@@ -71,16 +161,6 @@ Our parsing of the tokens cares not for ~Comment~'s or ~WhiteSpace~, so we'll
 #+name: opt
 #+begin_src gerbil
   (def (opt p) (.or p (return #f)))
-#+end_src
-
-* Lexical Errors
-
-#+NAME: lex-error
-#+begin_src gerbil 
-  (def (lex-error . args)
-    (.let* ((p (point))
-            (v (.or (.read-line) #!eof))) 
-     (apply error "LEX Error at " p v args)))
 #+end_src
 
 * ECMAScript Language: Lexical Grammar
@@ -327,26 +407,29 @@ the above example is interpreted in the same way as:
     :PROPERTIES:
     :CUSTOM_ID: syntax-4
     :END:
- 
-#+NAME: LineTerminator
-#+begin_quote
-[[LineTerminator][LineTerminator]]:: <LF> <CR> <LS> <PS>
-#+end_quote
 
-#+begin_src gerbil :noweb-ref line-terminator-lex
-  (def LineTerminator (.begin (.or <LF> <CR> <LS> <PS>) (return 'LineTerminator)))
-#+end_src
+****  LineTerminator
+     :PROPERTIES:
+     :CUSTOM_ID: LineTerminator
+     :END:
+ #+begin_quote
+ [[LineTerminator][LineTerminator]]:: <LF> <CR> <LS> <PS>
+ #+end_quote
 
-#+NAME: LineTerminatorSequence
-#+begin_quote
- [[LineTerminatorSequence][LineTerminatorSequence]] :: <LF> <CR>[lookahead ≠ <LF>] <LS> <PS> <CR><LF>
-#+end_quote
+ #+begin_src gerbil :noweb-ref line-terminator-lex
+   (def LineTerminator (.begin (.or <LF> <CR> <LS> <PS>) (return 'LineTerminator)))
+ #+end_src
 
-#+begin_src gerbil
-  (def LineTerminatorSequence
-    (.or <LF> (.begin0 <CR> (.not <LF>)) <LS> <PS>
-         (.let* ((cr <CR>) (lf <LF>)) (cons cr lf))))
-#+end_src
+ #+NAME: LineTerminatorSequence
+ #+begin_quote
+  [[LineTerminatorSequence][LineTerminatorSequence]] :: <LF> <CR>[lookahead ≠ <LF>] <LS> <PS> <CR><LF>
+ #+end_quote
+
+ #+begin_src gerbil
+   (def LineTerminatorSequence
+     (.or <LF> (.begin0 <CR> (.not <LF>)) <LS> <PS>
+          (.let* ((cr <CR>) (lf <LF>)) (cons cr lf))))
+ #+end_src
 
 ** Comments
    :PROPERTIES:
@@ -700,8 +783,25 @@ Note
      :CUSTOM_ID: syntax-8
      :END:
 
-  [[ReservedWord][ReservedWord]]::one
-  ofawaitbreakcasecatchclassconstcontinuedebuggerdefaultdeletedoelseenumexportextendsfalsefinallyforfunctionifimportininstanceofnewnullreturnsuperswitchthisthrowtruetrytypeofvarvoidwhilewithyield
+     #+NAME: ReservedWord
+     #+begin_quote
+     [[ReservedWord][ReservedWord]]:: 
+     one of await break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield
+     #+end_quote
+
+     #+begin_src gerbil :noweb-ref reservedword-lex
+       (def ReservedWord
+         (.begin0
+             (.or
+               "await" "break" "case" "catch" "class" "const" "continue" "debugger"
+               "default" "delete" "do" "else" "enum" "export" "extends" "false" "finally"
+               "for" "function" "if" "import" "in" "instanceof" "new" "null" "return"
+               "super" "switch" "this" "throw" "true" "try" "typeof" "var" "void" "while"
+               "with" "yield")
+           (.not IdentifierPart)))
+     #+end_src
+
+
   Note 1
 
   Per [[https://tc39.es/ecma262/#sec-grammar-notation][5.1.5]], keywords
@@ -778,8 +878,14 @@ Note
 #+end_src
 
 
-
+ #+NAME: DivPunctuator
+#+begin_quote
  [[DivPunctuator][DivPunctuator]]::/ /=
+#+end_quote
+
+#+begin_src gerbil :noweb-ref divpunctuator-lex
+(def DivPunctuator (.or #\/ "/="))
+#+end_src
 
 #+NAME: RightBracePunctuator 
 #+begin_quote
@@ -806,7 +912,15 @@ Note
      :CUSTOM_ID: syntax-10
      :END:
 
-  [[NullLiteral][NullLiteral]]::null
+***** NullLiteral
+   [[NullLiteral][NullLiteral]]::
+     null 
+
+     #+begin_src gerbil :noweb-ref null-literal
+       (def NullLiteral (.begin (peek (tpv? "null")) (item)))
+     #+end_src
+
+
 *** Boolean Literals
     :PROPERTIES:
     :CUSTOM_ID: boolean-literals
@@ -817,8 +931,20 @@ Note
      :CUSTOM_ID: syntax-11
      :END:
 
-  [[BooleanLiteral][BooleanLiteral]]::true
-  false
+***** BooleanLiteral
+
+   [[BooleanLiteral][BooleanLiteral]]::
+   true
+   false
+
+   #+begin_src gerbil :noweb-ref boolean-literal
+     (def BooleanLiteral
+       (.begin
+         (peek (tpt? 'IdentifierName))
+         (peek (.or (tpv? "true")
+                    (tpv? "false")))
+         (item)))
+   #+end_src
 *** INPROGRESS Numeric Literals
     :PROPERTIES:
     :CUSTOM_ID: numeric-literals
@@ -2517,10 +2643,10 @@ Derived from Table 2. Properties for Lexical Classes for Identifiers
 
 
 
-* /File/ lexical.ss
+* /File/ ~lexical.ss~
 
 #+begin_src gerbil :noweb yes :tangle "lexical.ss" 
-  (import :drewc/smug :drewc/js-syntax/source-code :drewc/js-syntax/custom-token :std/srfi/13)
+  (import :drewc/smug :drewc/js-syntax/source-code :drewc/js-syntax/custom :std/srfi/13 :std/generic)
   (export #t)
   <<abr>>
 
@@ -2556,8 +2682,8 @@ Derived from Table 2. Properties for Lexical Classes for Identifiers
   <<identifier-part-lex>>
   <<identifier-name-lex>>
 
-  <<punctuation-lexi>>
-
+  <<punctuation-lex>>
+  <<divpunctuator-lex>>
   <<right-brace-lex>>
 
   <<nonzero-digit-lex>>
@@ -2581,6 +2707,8 @@ Derived from Table 2. Properties for Lexical Classes for Identifiers
 
   <<common-token-lex>>
 
+  <<reservedword-lex>>
+
   <<input-element-div-lex>>
 
   <<Token>>
@@ -2588,5 +2716,23 @@ Derived from Table 2. Properties for Lexical Classes for Identifiers
   <<production>>
 
   <<lexify>>
+
+
+  ;;; Now parsers for tokens
+
+  <<null-literal>>
+
+  <<boolean-literal>>
 #+end_src
+
+* /File/ ~test/lexical-test.ss~
+
+#+begin_src gerbil :noweb yes :tangle test/lexical-test.ss :comments noweb
+  (import :std/misc/ports :drewc/js-syntax/lexical :drewc/js-syntax/custom
+            :drewc/smug :drewc/smug/tokens :std/srfi/1 :std/test)
+  (export token-test)
+  (def token-test (test-suite "Token Test"
+    <<token-test>>))
+#+end_src
+
 

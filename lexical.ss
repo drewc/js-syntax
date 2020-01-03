@@ -1,4 +1,4 @@
-(import :drewc/smug :drewc/js-syntax/source-code :drewc/js-syntax/custom-token :std/srfi/13)
+(import :drewc/smug :drewc/js-syntax/source-code :drewc/js-syntax/custom :std/srfi/13 :std/generic)
 (export #t)
 (def (abr code) (.char=? (if (integer? code) (integer->char code) code)))
 
@@ -7,10 +7,7 @@
 (def ID_Start (sat char-alphabetic?))
 (def ID_Continue (.or (.let* (c ID_Start) c) (sat char-numeric?) #\_))
 
-(def (lex-error . args)
-  (.let* ((p (point))
-          (v (.or (.read-line) #!eof))) 
-   (apply error "LEX Error at " p v args)))
+
 
 ;; Unicode Format-Control Characters
 (def <ZWNJ> (abr #x200C)) (def <ZWJ> (abr #x200D)) (def <ZWNBSP> (abr #xFEFF))
@@ -68,7 +65,7 @@
   `(IdentifierName ,(list->string (cons s ps)))))
 
 
-
+(def DivPunctuator (.or #\/ "/="))
 (def RightBracePunctuator (.list (return 'RightBracePunctuator) #\}))
 
 (def NonZeroDigit (sat (cut string-any <> "123456789")))
@@ -116,7 +113,6 @@
                  #\~ #\? #\:))
     `(Punctuator ,p)))
 
-
 (def DoubleStringCharacter 
   (.or (.begin (.not (.or #\" #\\ LineTerminator)) SourceCharacter)
        <LS>
@@ -126,8 +122,6 @@
   (.let* (cs (bracket #\" DoubleStringCharacters #\"))
    `(StringLiteral ,(list->string cs))))
 
-
-
 (def CommonToken
   (.or IdentifierName 
      ;; Numbers come first because ~.~ is a punctuator
@@ -136,22 +130,73 @@
        Punctuator))
 
 
+(def ReservedWord
+  (.or
+    "await" "break" "case" "catch" "class" "const" "continue" "debugger"
+    "default" "delete" "do" "else" "enum" "export" "extends" "false" "finally"
+    "for" "function" "if" "import" "in" "instanceof" "new" "null" "return"
+    "super" "switch" "this" "throw" "true" "try" "typeof" "var" "void" "while"
+    "with" "yield"))
+
 (def InputElementDiv
   (.or WhiteSpace LineTerminator Comment CommonToken RightBracePunctuator))
 
-(def Token
-  (.let* ((b (point))
-          (t (.or InputElementDiv CustomToken 
-               (.begin (.not (item)) (return #!eof))
-               (lex-error "Invalid Token")))
-          (e (point)))
-    (if (eof-object? t) (fail)
-        `(Token ,[begin: b end: e] ,t))))
+(def (lex-error c . args)
+  (.let* (p (point)) (apply error "Invalid Token:" c "at" (1- p) args)))
 
-(def (token? v) (and (pair? v) (eq? 'Token (car v)) (= 3 (length v))))
-(def (token-prop t k) (and (token? t) (pgetq k (cadr t))))
-(def (token-production t) (and (token? t) (caddr t)))
-(def (tokenize str) (run (many1 Token) str))
+(def JSToken
+  (.or (.begin #!void (Token CustomToken InputElementDiv))
+       (.let* (v (.or #!eof ITEM)) (if (eof-object? v) FAIL (lex-error v)))))
+
+(def (tokenize str) (run (many1 JSToken) str))
 
 (def (production? p) (or (symbol? p) (and (pair? p) (symbol? (car p)))))
+(def (token-production t) (let (v (token-value t)) (and (production? v) v)))
 (def (production-type p) (and (production? p) (if (pair? p) (car p) p)))
+(def (production-value p) (and (production? p) (if (pair? p) (cadr p) p)))
+(def (token-production-type t)
+  (let (v (token-production t)) (and v (production-type v))))
+(def (token-production-value (t #f))
+  (def (tpv tk)  
+    (let (v (token-production tk)) (and v (production-value v))))
+  (if t (tpv t) (.let* (t (item)) (return (token-production-value t)))))
+(def (token-production-type? p) (token-reader? p token-production-type))
+(def (token-production-value? p) (token-reader? p token-production-value))
+
+(defalias tpv token-production-value)
+(defalias tpv? token-production-value?)
+(defalias tpt? token-production-type?)
+
+
+(defstruct lex-tokens (vector list) transparent: #t)
+(defmethod (input-item (ts lex-tokens)) (input-item (String 0 ts)))
+(defmethod (input-item-ref (t lex-tokens) (n <t>))
+  (input-item-ref (lex-tokens-vector t) n))
+
+(def (lexify thing (rem '(Comment WhiteSpace LineTerminator)))
+  (def tokens (if (list? thing) thing (tokenize thing)))
+  (let (v (filter (lambda (t) (let (pt (production-type (token-production t)))
+                           (not (member pt rem)))) tokens))
+    (lex-tokens (list->vector v) tokens)))
+(def (.lex-tokens)
+  (lambda (i) ((return (if (String? i) (String-thing i) i)) i)))
+
+(def (next-source-tokens)
+  (peek (.let* ((p (point))
+                (t (.begin (goto-char (1- p)) (item)))
+                (lts (.lex-tokens))
+                (l (lex-tokens-list lts))
+                (m (member t l)))
+          (if m (cdr m) #f))))
+
+
+;;; Now parsers for tokens
+
+(def NullLiteral (.begin (peek (tpv? "null")) (item)))
+
+(def BooleanLiteral
+  (.begin
+    (peek (tpt? 'IdentifierName))
+    (peek (.or (tpv? "true")
+               (tpv? "false")))
+    (item)))
