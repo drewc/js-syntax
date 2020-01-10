@@ -11,8 +11,9 @@
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*Smooth%20Operators][]]
 (def (parse-operator side op)
-  (.or (.let* ((lhs side) (rhs (.begin (tpv? op) side)))
-         (return (values lhs op rhs)))
+  (.or (.let* ((lhs side) (pop (tpv? op))
+               (rhs side))
+         (return (values lhs pop rhs)))
        (.let* (s side) (return (values s #f #f)))))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*Smooth%20Operators][]]
@@ -21,8 +22,8 @@
   ((_ maker side op)
    (.begin
      #t
-     (.let* ((values lhs _ rhs) (parse-operator side op))
-       (return (if rhs (maker lhs op rhs) lhs))))))
+     (.let* ((values lhs pop rhs) (parse-operator side op))
+       (return (if rhs (maker lhs pop rhs) lhs))))))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*No%20%5B%5Bfile:lexical.org::#LineTerminator%5D%5BLineTerminator%5D%5D%20here?%20~no-token-here~!][]]
 (def (no-token-here type)
@@ -35,7 +36,7 @@
       (sat identity (return (run (find-token t) ts)))))
   (peek (.let* (t (peek T-ITEM)) (.find-token t)))) 
 ;; ends here
-;; [[file:~/src/js-syntax/expressions.org::#BindingIdentifier][]]
+;; [[file:~/src/js-syntax/expressions.org::*Identifier][]]
 (defstruct (identifier expression) (name) transparent: #t) 
 (def Identifier
   (.begin (peek (token-production-type? 'IdentifierName))
@@ -43,10 +44,12 @@
           (.let* (t (item))
             (return (identifier (token-production-value t))))))
 ;; ends here
-;; [[file:~/src/js-syntax/expressions.org::#syntax-identifiers][]]
+;; [[file:~/src/js-syntax/expressions.org::*IdentifierReference][]]
 (defstruct (identifier-reference identifiers) (identifier) transparent: #t) 
 (def IdentifierReference
   (.let* (id Identifier) (return (identifier-reference id))))
+(def (identifier-reference-name self)
+    (identifier-name (identifier-reference-identifier self)))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::#BindingIdentifier][]]
 (defstruct (binding-identifier identifiers) (identifier) transparent: #t) 
@@ -94,29 +97,46 @@
                (t (if (or e i) #f #f #;TemplateLiterate)))
          (if (not (or e i t)) g
              (member-expression g e i t))))
-(def MemberExpression (parse-member-expression))
+(def MemberExpression (.begin (.or (parse-member-expression) NewExpression)))
 
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*CallExpression][]]
-(def CallExpression FAIL)
+
+;;; This CoverCallExpressionAndAsyncArrowHead in in the Functions and Classes
+;;; spec, but needs to be here.
+
+;; CoverCallExpressionAndAsyncArrowHead[Yield, Await]:
+;;     MemberExpression[?Yield, ?Await]Arguments[?Yield, ?Await]
+
+(defstruct (call-expression expression) (lhs rhs)
+  transparent: #t)
+
+(def CoverCallExpressionAndAsyncArrowHead
+  (.begin (.let* ((lhs MemberExpression)
+                  (rhs Arguments))
+            (call-expression lhs rhs))))
+
+(def CallExpression
+  (.begin CoverCallExpressionAndAsyncArrowHead))
+
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::#NewExpression][]]
 (defstruct (new-expression expression) (expression arguments) transparent: #t)
 (def NewExpression
   (.begin 
-    #t
-    (.or (.let* ((exp (.begin (tpv? "new") MemberExpression)))
-           (new-expression exp #f))
+    (.or (.let* ((exp (.begin (tpv? "new") MemberExpression))
+                 (args (.or Arguments #f)))
+
+           (new-expression exp args))
          MemberExpression)))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*Arguments][]]
 (defstruct (arguments expression) (list) transparent: #t) 
 (def Arguments
-  (.let* ((_ #t) (lst (bracket (tpv? #\()
-                               (.or ArgumentList (return []))
-                               (.begin (.or (tpv? #\,) #f) (tpv? #\))))))
-          (return (arguments lst))))
-
+  (.let* ((_ (tpv? #\())
+          (empty? (.or (tpv? #\)) #f))
+          (args (if empty? [] ArgumentList)))
+    (return (arguments args))))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*ArgumentList][]]
 (def ArgumentList (.begin #t (sepby1 (.or SpreadElement AssignmentExpression)
@@ -127,9 +147,6 @@
 (def SpreadElement (.let* ((_ (tpv? "..."))
                            (e AssignmentExpression))
                      (return (spread-element e))))
-
-
-
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::#LeftHandSideExpression][]]
 (def LeftHandSideExpression (.begin #t (.or NewExpression CallExpression)))
@@ -174,27 +191,19 @@
 ;; [[file:~/src/js-syntax/expressions.org::*AdditiveExpression][]]
 (defstruct (additive-expression operator) () transparent: #t)
 (def AdditiveExpression
-  (.or (Operator additive-expression MultiplicativeExpression "+")
-       (Operator additive-expression MultiplicativeExpression "-")))
-
+  (Operator additive-expression MultiplicativeExpression (.or "+" "-")))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*ShiftExpression][]]
 (defstruct (shift-expression operator) () transparent: #t)
 (def ShiftExpression
-  (.or (Operator shift-expression AdditiveExpression "<<")
-       (Operator shift-expression AdditiveExpression ">>")
-       (Operator shift-expression AdditiveExpression ">>>")))
+  (.or (Operator shift-expression AdditiveExpression (.or  ">>>" "<<" ">>"))))
 
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*RelationalExpression][]]
 (defstruct (relational-expression operator) () transparent: #t)
 (def RelationalExpression
-  (.or (Operator relational-expression ShiftExpression "<")
-       (Operator relational-expression ShiftExpression ">")
-       (Operator relational-expression ShiftExpression "<=")
-       (Operator relational-expression ShiftExpression ">=")
-       (Operator relational-expression ShiftExpression "instanceof")
-       (Operator relational-expression ShiftExpression "in")))
+  (Operator relational-expression ShiftExpression
+            (.or "instanceof""in""<=" ">=" "<" ">")))
 
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*EqualityExpression][]]
@@ -209,18 +218,17 @@
 ;; [[file:~/src/js-syntax/expressions.org::*BitwiseANDExpression][]]
 (defstruct (bitwise-and-expression operator) () transparent: #t)
 (def BitwiseANDExpression
-  (Operator bitwise-and-expression EqualityExpression #\&))
+  (Operator bitwise-and-expression EqualityExpression "&"))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*BitwiseXORExpression][]]
 (defstruct (bitwise-xor-expression operator) () transparent: #t)
 (def BitwiseXORExpression
-  (Operator bitwise-xor-expression BitwiseANDExpression #\^))
+  (Operator bitwise-xor-expression BitwiseANDExpression "^"))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*BitwiseORExpression][]]
 (defstruct (bitwise-or-expression operator) () transparent: #t)
 (def BitwiseORExpression
-  (Operator bitwise-or-expression BitwiseXORExpression #\|))
-
+  (Operator bitwise-or-expression BitwiseXORExpression "|"))
 ;; ends here
 ;; [[file:~/src/js-syntax/expressions.org::*LogicalANDExpression][]]
 (defstruct (logical-and-expression operator) () transparent: #t)

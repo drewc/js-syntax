@@ -226,7 +226,7 @@ the above example is interpreted in the same way as:
 
 #+begin_src gerbil :noweb-ref input-element-div-lex
   (def InputElementDiv
-    (.or WhiteSpace LineTerminator Comment CommonToken RightBracePunctuator))
+    (.or WhiteSpace LineTerminator Comment CommonToken RightBracePunctuator DivPunctuator))
 #+end_src
 *** TODO 
  [[InputElementRegExp][InputElementRegExp]]::[[WhiteSpace][WhiteSpace]]
@@ -606,7 +606,7 @@ Note
 #+begin_src gerbil :noweb-ref identifier-name-lex
   (def IdentifierName 
    (.let* ((s IdentifierStart)
-           (ps (many IdentifierPart)))
+           (ps (many (.begin IdentifierPart))))
     `(IdentifierName ,(list->string (cons s ps)))))
 #+end_src
 
@@ -791,14 +791,14 @@ Note
 
      #+begin_src gerbil :noweb-ref reservedword-lex
        (def ReservedWord
-         (.begin0
-             (.or
-               "await" "break" "case" "catch" "class" "const" "continue" "debugger"
-               "default" "delete" "do" "else" "enum" "export" "extends" "false" "finally"
-               "for" "function" "if" "import" "in" "instanceof" "new" "null" "return"
-               "super" "switch" "this" "throw" "true" "try" "typeof" "var" "void" "while"
-               "with" "yield")
-           (.not IdentifierPart)))
+         (.let* ((rw (.or
+                       "await" "break" "case" "catch" "class" "const" "continue" "debugger"
+                       "default" "delete" "do" "else" "enum" "export" "extends" "false" "finally"
+                       "for" "function" "if" "import" "in" "instanceof" "new" "null" "return"
+                       "super" "switch" "this" "throw" "true" "try" "typeof" "var" "void" "while"
+                       "with" "yield"))
+                 (_ (.not (.begin IdentifierPart))))
+           (return rw)))
      #+end_src
 
 
@@ -884,7 +884,8 @@ Note
 #+end_quote
 
 #+begin_src gerbil :noweb-ref divpunctuator-lex
-(def DivPunctuator (.or #\/ "/="))
+  (def DivPunctuator (.let* (p (.or #\/ "/="))
+                       (return `(DivPunctuator ,p))))
 #+end_src
 
 #+NAME: RightBracePunctuator 

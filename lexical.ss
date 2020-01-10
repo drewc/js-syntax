@@ -61,11 +61,12 @@
   (.or UnicodeIDContinue #\$ UnicodeEscapeSequence <ZWNJ> <ZWJ>))
 (def IdentifierName 
  (.let* ((s IdentifierStart)
-         (ps (many IdentifierPart)))
+         (ps (many (.begin IdentifierPart))))
   `(IdentifierName ,(list->string (cons s ps)))))
 
 
-(def DivPunctuator (.or #\/ "/="))
+(def DivPunctuator (.let* (p (.or #\/ "/="))
+                     (return `(DivPunctuator ,p))))
 (def RightBracePunctuator (.list (return 'RightBracePunctuator) #\}))
 
 (def NonZeroDigit (sat (cut string-any <> "123456789")))
@@ -131,15 +132,17 @@
 
 
 (def ReservedWord
-  (.or
-    "await" "break" "case" "catch" "class" "const" "continue" "debugger"
-    "default" "delete" "do" "else" "enum" "export" "extends" "false" "finally"
-    "for" "function" "if" "import" "in" "instanceof" "new" "null" "return"
-    "super" "switch" "this" "throw" "true" "try" "typeof" "var" "void" "while"
-    "with" "yield"))
+  (.let* ((rw (.or
+                "await" "break" "case" "catch" "class" "const" "continue" "debugger"
+                "default" "delete" "do" "else" "enum" "export" "extends" "false" "finally"
+                "for" "function" "if" "import" "in" "instanceof" "new" "null" "return"
+                "super" "switch" "this" "throw" "true" "try" "typeof" "var" "void" "while"
+                "with" "yield"))
+          (_ (.not (.begin IdentifierPart))))
+    (return rw)))
 
 (def InputElementDiv
-  (.or WhiteSpace LineTerminator Comment CommonToken RightBracePunctuator))
+  (.or WhiteSpace LineTerminator Comment CommonToken RightBracePunctuator DivPunctuator))
 
 (def (lex-error c . args)
   (.let* (p (point)) (apply error "Invalid Token:" c "at" (1- p) args)))

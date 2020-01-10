@@ -20,8 +20,9 @@ The non-left-recursive abstraction of that is ~operator~.
 
 #+begin_src gerbil :noweb-ref operator
   (def (parse-operator side op)
-    (.or (.let* ((lhs side) (rhs (.begin (tpv? op) side)))
-           (return (values lhs op rhs)))
+    (.or (.let* ((lhs side) (pop (tpv? op))
+                 (rhs side))
+           (return (values lhs pop rhs)))
          (.let* (s side) (return (values s #f #f)))))
 #+end_src
 
@@ -43,8 +44,8 @@ to the rescue.
     ((_ maker side op)
      (.begin
        #t
-       (.let* ((values lhs _ rhs) (parse-operator side op))
-         (return (if rhs (maker lhs op rhs) lhs))))))
+       (.let* ((values lhs pop rhs) (parse-operator side op))
+         (return (if rhs (maker lhs pop rhs) lhs))))))
 #+end_src
 
 #+begin_src gerbil 
@@ -151,20 +152,24 @@ to the rescue.
     :CUSTOM_ID: syntax-identifiers
     :END:
    
-    #+NAME: IdentifierReference
-    #+begin_quote
-      [[IdentifierReference][IdentifierReference]][Yield, Await]:
-       [[Identifier][Identifier]] 
-       [~Yield]yield 
-       [~Await]await
-    #+end_quote 
+    
+**** IdentifierReference
+     #+begin_quote
+       [[IdentifierReference][IdentifierReference]][Yield, Await]:
+        [[Identifier][Identifier]] 
+        [~Yield]yield 
+        [~Await]await
+     #+end_quote 
 
-    #+begin_src gerbil :noweb-ref id-ref
-      (defstruct (identifier-reference identifiers) (identifier) transparent: #t) 
-      (def IdentifierReference
-        (.let* (id Identifier) (return (identifier-reference id))))
-    #+end_src
+     #+begin_src gerbil :noweb-ref id-ref
+       (defstruct (identifier-reference identifiers) (identifier) transparent: #t) 
+       (def IdentifierReference
+         (.let* (id Identifier) (return (identifier-reference id))))
+       (def (identifier-reference-name self)
+           (identifier-name (identifier-reference-identifier self)))
+     #+end_src
 
+***** TODO yield and await 
 **** BindingIdentifier
      :PROPERTIES:
      :CUSTOM_ID: BindingIdentifier
@@ -2064,7 +2069,6 @@ to the rescue.
      (defstruct (new-expression expression) (expression arguments) transparent: #t)
      (def NewExpression
        (.begin 
-         #t
          (.or (.let* ((exp (.begin (tpv? "new") MemberExpression))
                       (args (.or Arguments #f)))
 
@@ -2084,7 +2088,24 @@ to the rescue.
     [[CallExpression][CallExpression]][?Yield, ?Await][[TemplateLiteral][TemplateLiteral]][?Yield, ?Await, +Tagged]
 
     #+begin_src gerbil :noweb-ref call-expression
-      (def CallExpression FAIL)
+
+      ;;; This CoverCallExpressionAndAsyncArrowHead in in the Functions and Classes
+      ;;; spec, but needs to be here.
+
+      ;; CoverCallExpressionAndAsyncArrowHead[Yield, Await]:
+      ;;     MemberExpression[?Yield, ?Await]Arguments[?Yield, ?Await]
+
+      (defstruct (call-expression expression) (lhs rhs)
+        transparent: #t)
+
+      (def CoverCallExpressionAndAsyncArrowHead
+        (.begin (.let* ((lhs MemberExpression)
+                        (rhs Arguments))
+                  (call-expression lhs rhs))))
+
+      (def CallExpression
+        (.begin CoverCallExpressionAndAsyncArrowHead))
+
     #+end_src
 
   
@@ -2133,7 +2154,7 @@ to the rescue.
   #+begin_quote
   [[LeftHandSideExpression][LeftHandSideExpression]][Yield, Await]:
    [[NewExpression][NewExpression]][?Yield, ?Await]
-   [[CallExpression][ CallExpression]][?Yield, ?Await]
+   [[CallExpression][CallExpression]][?Yield, ?Await]
   #+end_quote
 
   #+begin_src gerbil :noweb-ref left-hand-side-expression
@@ -3555,9 +3576,7 @@ to the rescue.
       #+begin_src gerbil :noweb-ref additive-expression
         (defstruct (additive-expression operator) () transparent: #t)
         (def AdditiveExpression
-          (.or (Operator additive-expression MultiplicativeExpression "+")
-               (Operator additive-expression MultiplicativeExpression "-")))
-
+          (Operator additive-expression MultiplicativeExpression (.or "+" "-")))
       #+end_src
 
 
@@ -3709,9 +3728,7 @@ to the rescue.
       #+begin_src gerbil :noweb-ref shift-expression
         (defstruct (shift-expression operator) () transparent: #t)
         (def ShiftExpression
-          (.or (Operator shift-expression AdditiveExpression "<<")
-               (Operator shift-expression AdditiveExpression ">>")
-               (Operator shift-expression AdditiveExpression ">>>")))
+          (.or (Operator shift-expression AdditiveExpression (.or  ">>>" "<<" ">>"))))
 
       #+end_src
 **** Static Semantics: IsFunctionDefinition
@@ -3882,12 +3899,8 @@ to the rescue.
       #+begin_src gerbil :noweb-ref relational-expression
         (defstruct (relational-expression operator) () transparent: #t)
         (def RelationalExpression
-          (.or (Operator relational-expression ShiftExpression "<")
-               (Operator relational-expression ShiftExpression ">")
-               (Operator relational-expression ShiftExpression "<=")
-               (Operator relational-expression ShiftExpression ">=")
-               (Operator relational-expression ShiftExpression "instanceof")
-               (Operator relational-expression ShiftExpression "in")))
+          (Operator relational-expression ShiftExpression
+                    (.or "instanceof""in""<=" ">=" "<" ">")))
 
       #+end_src
 
@@ -4249,7 +4262,7 @@ to the rescue.
    #+begin_src gerbil :noweb-ref bitwise-expression
      (defstruct (bitwise-and-expression operator) () transparent: #t)
      (def BitwiseANDExpression
-       (Operator bitwise-and-expression EqualityExpression #\&))
+       (Operator bitwise-and-expression EqualityExpression "&"))
    #+end_src
 ***** BitwiseXORExpression
 
@@ -4260,7 +4273,7 @@ to the rescue.
    #+begin_src gerbil :noweb-ref bitwise-expression
      (defstruct (bitwise-xor-expression operator) () transparent: #t)
      (def BitwiseXORExpression
-       (Operator bitwise-xor-expression BitwiseANDExpression #\^))
+       (Operator bitwise-xor-expression BitwiseANDExpression "^"))
    #+end_src
 
 ***** BitwiseORExpression 
@@ -4273,8 +4286,7 @@ to the rescue.
    #+begin_src gerbil :noweb-ref bitwise-expression
      (defstruct (bitwise-or-expression operator) () transparent: #t)
      (def BitwiseORExpression
-       (Operator bitwise-or-expression BitwiseXORExpression #\|))
-
+       (Operator bitwise-or-expression BitwiseXORExpression "|"))
    #+end_src
 **** Static Semantics: IsFunctionDefinition
      :PROPERTIES:

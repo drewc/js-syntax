@@ -1,7 +1,8 @@
-#+TITLE: js-syntax
+#+TITLE: Gerbil js-syntax: A Parser from ECMAScript -> structures.
 
-A Parser from ECMAScript -> Sexps
-
+Originally, JavaScript was [[https://dxr.mozilla.org/mozilla/source/js2/semantics/][implemented in Common Lisp]], and actually had a
+scheme-like syntax at one point. Well, Gerbil is more common! Now, some 26 years
+later, we lisp again.
 
 * Usage  
 
@@ -9,14 +10,29 @@ Just starting out, all we have is ~lexify~ which returns tokens as specified as
 [[file:lexical.org][Lexical]].
 
 #+begin_src gerbil
-  (import :std/misc/ports :drewc/js-syntax/lexical)
 
-  (def js-test-string (read-file-string "~/src/js-syntax/test/rps.glo"))
+#+end_src
 
-  (def js-test-tokens (lexify js-test-string))
+* Literate Code and Documentation 
 
-  (delete-duplicates (map production-type (map token-production js-test-tokens))) 
-   ;; => '(|#lang| LineTerminator Comment IdentifierName WhiteSpace Punctuator
-   ;;    RightBracePunctuator NumericLiteral Annotation StringLiteral)
+This library is implemented using the ECMAScript Specification, in a [[https://en.wikipedia.org/wiki/Literate_programming][Literate
+Programming]] style using [[https://orgmode.org/][Org mode.]] The code is all contained in ~.org~ files,
+usually named after the .ss file they are "tangling".
+
+#+begin_src shell :tangle "tangle.sh" :shebang "#!/usr/bin/env bash"
+
+  # Change to where this file lives
+  cd "$(dirname "$0")"
+
+
+  tangle() {
+      emacs --batch -l org --eval "(org-babel-tangle-file \"$1\")"
+  }
+
+
+  tangle_files=("source-code" "custom" "lexical" "expressions" "statements-and-declarations" "functions-and-classes" "scripts-and-modules" "js-syntax")
+
+  # Tangle the files! 
+  printf '%s\0' "${tangle_files[@]}" | xargs -0 -n1 tangle
 
 #+end_src

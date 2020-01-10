@@ -1,7 +1,10 @@
 #+TITLE: Literal Numbers, not so literal!
 
+
+#+SEQ_TODO:   TODO(t) ISSUE-OR-BUG(i) WAITING(w@) | DONE(d) CANCELED(c@)
+
 #+begin_src gerbil
-  (import :drewc/js-syntax :std/test)
+  (import :drewc/js-syntax :std/test :drewc/smug)
 #+end_src
 
 One of the very first things I did was make a [[file:lexical.org::#numeric-literals][NumericLiteral]] lexical token. When
@@ -9,7 +12,7 @@ trying to parse a [[file:statements-and-declarations.org::#StatementList][Statem
 waiting for a number to pop up as all my test files had them.
 
 It turns out that the parser to run to get a ~numeric-literal~ syntax leaf out
-of it is ~AssigmentExpression~. This is so it can assign to itself, essentially.b
+of it is ~AssigmentExpression~. This is so it can assign to itself, essentially.
 
 Wait, what? Well, when drilling down to the very end of what it produces, a
 ~Literal~ is one of the items.
@@ -132,8 +135,333 @@ Now, the ~.~ operand.
 
 
 #+begin_src gerbil 
+  (def n-new (run NewExpression numeric-tokens))
+  (check-predicate n-new numeric-literal?)
+  (check (literal-value n-new) => "42")
+#+end_src
+
+
+Ah, finally! Test Driven Development. Testing it seems to say I need another reader.
+
+#+begin_src gerbil 
+  (def (identifier-reference-name self)
+    (identifier-name (identifier-reference-identifier self)))
+#+end_src
+
+#+begin_src gerbil 
+
+  ;;; First, no parens
+  (def new-nparen-tokens (lexify "new Foo;"))
+
+  (def new-nparen-test (run NewExpression new-nparen-tokens))
+
+  (check (identifier-reference-name (new-expression-expression new-nparen-test))
+         => "Foo")
+
+  (check (new-expression-arguments new-nparen-test)
+         => #f)
+
+  ;; Now, args
+
+  (def new-tokens (lexify "new Foo(bar, baz);"))
+
+  (def new-test (run NewExpression new-tokens))
+
+  (check (identifier-reference-name (new-expression-expression new-test))
+         => "Foo")
+
+  (check (identifier-reference-name
+          (list-ref (arguments-list (new-expression-arguments new-test)) 0))
+         => "bar")
+  (check (identifier-reference-name
+          (list-ref (arguments-list (new-expression-arguments new-test)) 1))
+         => "baz")
+                                   
+#+end_src
+
+
+* LeftHandSideExpression
+
+
+
+#+begin_src gerbil 
+  (def lhs-new (run LeftHandSideExpression numeric-tokens))
+  (check-predicate lhs-new numeric-literal?)
+  (check (literal-value lhs-new) => "42")
+#+end_src
+
+* UpdateExpression 
+
+#+begin_src gerbil 
+  (def update-test (run UpdateExpression numeric-tokens))
+  (check-predicate update-test numeric-literal?)
+  (check (literal-value update-test) => "42")
+#+end_src
+
+
+#+begin_src gerbil
+  (def (test-update-exp u pre exp post)
+    (check (update-expression-prefix u) => pre)
+    (check
+     (identifier-reference-name
+      (update-expression-expression u))
+     => exp)
+    (check (update-expression-postfix u) => post))
+
+  (test-update-exp (run UpdateExpression (lexify "++foo"))
+                   "++" "foo" #f)
+  (test-update-exp (run UpdateExpression (lexify "--foo"))
+                   "--" "foo" #f)
+  (test-update-exp (run UpdateExpression (lexify "foo++"))
+                   #f "foo" "++")
+  (test-update-exp (run UpdateExpression (lexify "foo--"))
+                   #f "foo" "--")
+#+end_src
+
+* UnaryExpression
+
+
+#+begin_src gerbil 
+  (def unary-test (run UnaryExpression numeric-tokens))
+  (check-predicate unary-test numeric-literal?)
+  (check (literal-value unary-test) => "42")
+#+end_src
+
+
+
+#+begin_src gerbil
   (import :drewc/js-syntax :std/test :drewc/smug)
+  (def (test-unary-exp u op exp)
+    (check (unary-expression-op u) => op)
+    (check
+     (identifier-reference-name
+      (unary-expression-expression u)) => exp))
 
+  (test-unary-exp (run UnaryExpression (lexify "delete foo"))
+                   "delete" "foo")
+  (test-unary-exp (run UnaryExpression (lexify "void foo"))
+                   "void" "foo")
+  (test-unary-exp (run UnaryExpression (lexify "typeof foo"))
+                   "typeof" "foo")
+  (test-unary-exp (run UnaryExpression (lexify "+foo"))
+                  "+" "foo")
 
+  (test-unary-exp (run UnaryExpression (lexify "-foo"))
+                   "-" "foo")
 
 #+end_src
+
+** ISSUE-OR-BUG ~-delete foo~ loops infinitely
+
+ How to trace and/or step?
+
+ #+begin_src gerbil
+   ;; DO NOT RUN!!! Recurses infinitely
+   (test-unary-exp (run UnaryExpression (lexify "-delete foo"))
+                    "-" "foo")
+ #+end_src
+
+* ExponentiationExpression
+
+This is a ~operator~ child struct.
+#+begin_src gerbil 
+  (import :drewc/js-syntax :std/test :drewc/smug)
+  (def expo-test (run ExponentiationExpression numeric-tokens))
+  (check-predicate expo-test numeric-literal?)
+  (check (literal-value expo-test) => "42")
+#+end_src
+
+#+begin_src gerbil
+  (def expo-tok-test (lexify "foo**42"))
+
+  (def expo-tok (run ExponentiationExpression expo-tok-test))
+
+  (check-predicate expo-tok exponentiation-expression?)
+
+  (check (identifier-reference-name (operator-lhs expo-tok))
+         => "foo")
+  (check (operator-op expo-tok) => "**")
+
+  (check (literal-value (operator-rhs expo-tok)) =>"42")
+#+end_src
+
+* MultiplicativeExpression
+
+
+
+#+begin_src gerbil 
+  (def mult-test (run MultiplicativeExpression numeric-tokens))
+  (check-predicate mult-test numeric-literal?)
+  (check (literal-value mult-test) => "42")
+#+end_src
+
+
+MultiplicativeExpression Can apparently be multiply, divide or modulo.
+
+
+#+begin_src gerbil
+  (def mult-tok-test (lexify "foo * 42"))
+  (def mult-tok (run MultiplicativeExpression mult-tok-test))
+
+  (check-predicate mult-tok multiplicative-expression?)
+
+  (check (identifier-reference-name (operator-lhs mult-tok))
+         => "foo")
+  (check (operator-op mult-tok) => #\*)
+
+  (check (literal-value (operator-rhs mult-tok)) =>"42")
+
+  (def div-tok-test (lexify "foo / 42"))
+  (def div-tok (run MultiplicativeExpression div-tok-test))
+
+  (check-predicate div-tok multiplicative-expression?)
+
+  (check (identifier-reference-name (operator-lhs div-tok))
+         => "foo")
+  (check (operator-op div-tok) => #\/)
+
+  (check (literal-value (operator-rhs div-tok)) =>"42")
+  (def mod-tok-test (lexify "foo % 42"))
+  (def mod-tok (run MultiplicativeExpression mod-tok-test))
+
+  (check-predicate mod-tok multiplicative-expression?)
+
+  (check (identifier-reference-name (operator-lhs mod-tok))
+         => "foo")
+  (check (operator-op mod-tok) => #\%)
+
+  (check (literal-value (operator-rhs mod-tok)) =>"42")
+#+end_src
+* AdditiveExpression
+
+
+#+begin_src gerbil 
+  (def add-test (run AdditiveExpression numeric-tokens))
+  (check-predicate add-test numeric-literal?)
+  (check (literal-value add-test) => "42")
+#+end_src
+
+Like MultiplicativeExpression, AdditiveExpression can subtract.
+
+#+begin_src gerbil
+  (def add-tok-test (lexify "foo + 42"))
+  (def add-tok (run AdditiveExpression add-tok-test))
+
+  (check-predicate add-tok additive-expression?)
+
+  (check (identifier-reference-name (operator-lhs add-tok))
+         => "foo")
+  (check (operator-op add-tok) => "+")
+
+  (check (literal-value (operator-rhs add-tok)) =>"42")
+
+  (def sub-tok-test (lexify "foo - 42"))
+  (def sub-tok (run AdditiveExpression sub-tok-test))
+
+  (check-predicate sub-tok additive-expression?)
+
+  (check (identifier-reference-name (operator-lhs sub-tok))
+         => "foo")
+  (check (operator-op sub-tok) => "-")
+
+  (check (literal-value (operator-rhs sub-tok)) =>"42")
+#+end_src
+
+* ShiftExpression
+
+
+#+begin_src gerbil 
+  (def shift-test (run ShiftExpression numeric-tokens))
+  (check-predicate shift-test numeric-literal?)
+  (check (literal-value shift-test) => "42")
+#+end_src
+#+begin_src gerbil
+  (def shift-tok-test (lexify "foo >> 42"))
+  (def shift-tok (run ShiftExpression shift-tok-test))
+
+  (check-predicate shift-tok shift-expression?)
+
+  (check (identifier-reference-name (operator-lhs shift-tok))
+         => "foo")
+  (check (operator-op shift-tok) => ">>")
+
+  (check (literal-value (operator-rhs shift-tok)) =>"42")
+
+  (def shift2-tok-test (lexify "foo << 42"))
+  (def shift2-tok (run ShiftExpression shift2-tok-test))
+  (check (operator-op shift2-tok) => "<<")
+
+  (def shift3-tok-test (lexify "foo >>> 42"))
+  (def shift3-tok (run ShiftExpression shift3-tok-test))
+  (check (operator-op shift3-tok) => ">>>")
+#+end_src
+
+* RelationalExpression
+
+#+begin_src gerbil
+  (check-predicate (run RelationalExpression (lexify "foo instanceof bar"))
+                   relational-expression?)
+  (check-predicate (run RelationalExpression (lexify "foo in bar"))
+                   relational-expression?)
+  (check-predicate (run RelationalExpression (lexify "foo >= bar"))
+                   relational-expression?)
+  (check (operator-op (run RelationalExpression (lexify "foo >= bar"))) => ">=")
+  (check-predicate (run RelationalExpression (lexify "foo <= bar"))
+                   relational-expression?)
+  (check-predicate (run RelationalExpression (lexify "foo > bar"))
+                   relational-expression?)
+  (check-predicate (run RelationalExpression (lexify "foo < bar"))
+                   relational-expression?)
+#+end_src
+
+#+begin_src gerbil 
+  (def rel-test (run RelationalExpression numeric-tokens))
+  (check-predicate rel-test numeric-literal?)
+  (check (literal-value rel-test) => "42")
+#+end_src
+
+* Bitwise(AND/OR/XOR)Expression
+
+#+begin_src gerbil 
+  (def band-test (run BitwiseANDExpression numeric-tokens))
+  (check-predicate band-test numeric-literal?)
+  (check (literal-value band-test) => "42")
+  (def bor-test (run BitwiseORExpression numeric-tokens))
+  (check-predicate bor-test numeric-literal?)
+  (check (literal-value bor-test) => "42")
+  (def bxor-test (run BitwiseXORExpression numeric-tokens))
+  (check-predicate bxor-test numeric-literal?)
+  (check (literal-value bxor-test) => "42")
+#+end_src
+
+
+#+begin_src gerbil
+  (check-predicate (run BitwiseANDExpression (lexify "foo & bar"))
+                   bitwise-and-expression?)
+  (check-predicate (run BitwiseORExpression (lexify "foo | bar"))
+                   bitwise-or-expression?)
+  (check-predicate (run BitwiseXORExpression (lexify "foo ^ bar"))
+                   bitwise-xor-expression?)
+#+end_src
+
+* Logical(AND/OR)Expression
+#+begin_src gerbil 
+  (import :drewc/js-syntax :std/test :drewc/smug)
+  (def numeric-tokens (lexify "42"))
+  (def land-test (run LogicalANDExpression numeric-tokens))
+  (check-predicate land-test numeric-literal?)
+  (check (literal-value land-test) => "42")
+  (def lor-test (run LogicalORExpression numeric-tokens))
+  (check-predicate lor-test numeric-literal?)
+  (check (literal-value lor-test) => "42")
+#+end_src
+
+#+begin_src gerbil
+  (check-predicate (run LogicalANDExpression (lexify "foo && abar"))
+                   logical-and-expression?)
+  (check-predicate (run LogicalORExpression (lexify "foo || bar"))
+                   logical-or-expression?)
+#+end_src
+
+
+** TODO 
