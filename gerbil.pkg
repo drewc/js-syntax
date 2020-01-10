@@ -1,1 +1,1 @@
-(package: drewc/js-syntax depends: ("github.com/drewc/smug-gerbil"))
+(package: drewc/js-syntax depend: ("github.com/drewc/smug-gerbil"))
