@@ -4,35 +4,149 @@ Originally, JavaScript was [[https://dxr.mozilla.org/mozilla/source/js2/semantic
 scheme-like syntax at one point. Well, Gerbil is more common! Now, some 26 years
 later, we lisp again.
 
+* Installation 
+
+#+begin_src shell
+gxpkg install github.com/drewc/js-syntax
+#+end_src
+
+#+RESULTS:
+
 * Usage  
 
 Just starting out, all we have is ~lexify~ which returns tokens as specified as
 [[file:lexical.org][Lexical]].
 
-#+begin_src gerbil
+   #+begin_src gerbil 
+     (import :drewc/js-syntax :drewc/smug :std/test)
 
-#+end_src
+     (def test-tokens (lexify "foo + 42"))
 
+     (def test-syntax-struct (run AssignmentExpression test-tokens))
+
+     (check-predicate test-syntax-struct additive-expression?)
+     (check-predicate test-syntax-struct operator?)
+
+     (check-predicate (operator-lhs test-syntax-struct) identifier-reference?)
+
+     (check (identifier-reference-name (operator-lhs test-syntax-struct))
+            => "foo")
+
+     (check (operator-op test-syntax-struct)  => "+")
+   #+end_src
 * Literate Code and Documentation 
 
 This library is implemented using the ECMAScript Specification, in a [[https://en.wikipedia.org/wiki/Literate_programming][Literate
 Programming]] style using [[https://orgmode.org/][Org mode.]] The code is all contained in ~.org~ files,
 usually named after the .ss file they are "tangling".
 
-#+begin_src shell :tangle "tangle.sh" :shebang "#!/usr/bin/env bash"
 
-  # Change to where this file lives
-  cd "$(dirname "$0")"
+** Tangle : Extracting Source
+
+   So, to tangle code in emacs, ~org-babel-tangle-file~ is the function, and the
+   interactive ~org-babel-tangle (C-c C-v C-t)~ is of good use if you happen to
+   use emacs as your editor.
+
+ #+begin_src shell :tangle "tangle.sh" :shebang "#!/usr/bin/env bash"
+
+   # Change to where this file lives
+   cd "$(dirname "$0")"
+
+   # Use Emacs to tangle the files.
+   tangle() {
+       emacs --batch -l org --eval "(org-babel-tangle-file \"$1\")"
+   }
 
 
-  tangle() {
-      emacs --batch -l org --eval "(org-babel-tangle-file \"$1\")"
-  }
+   tangle_files=("README" "source-code" "custom" "lexical" "expressions"
+                 "statements-and-declarations" "functions-and-classes"
+                 "scripts-and-modules" "js-syntax")
+
+   # Tangle the files! 
+
+   ## printf '%s\0' "${tangle_files[@]}" | xargs -0 -n1 tangle ;; # does not work
+
+   for f in ${tangle_files[@]}; do
+    tangle "${f}.org"
+   done
+
+ #+end_src
 
 
-  tangle_files=("source-code" "custom" "lexical" "expressions" "statements-and-declarations" "functions-and-classes" "scripts-and-modules" "js-syntax")
+** SLIME and Source Blocks
 
-  # Tangle the files! 
-  printf '%s\0' "${tangle_files[@]}" | xargs -0 -n1 tangle
+   One of the nice things about *REPL*'s and interactive development is just
+   that. Emacs has great support for such things. As a former Common Lisp
+   addict, [[https://common-lisp.net/project/slime/doc/html/][*SLIME*]] and *SWANK* are a wonderful way to use an *inferior lisp*.
 
-#+end_src
+   First, install the ~github.com/ecraven/r7rs-swank~ package.
+
+   #+begin_src shell
+     gxpkg install github.com/drewc/drewc-r7rs-swank
+   #+end_src
+
+   Make sure you have slime installed and configured in your emacs init file.
+
+   #+BEGIN_SRC emacs-lisp
+     (require 'package)
+     (add-to-list 'package-archives
+                  '("melpa" . "https://melpa.org/packages/") t)
+
+     (package-refresh-contents)
+     (package-initialize)
+     (package-install use-package)
+
+     (use-package slime
+       :ensure  t
+       :config (setq inferior-lisp-program "sbcl")
+       (setq slime-contribs '(slime-fancy slime-tramp)))
+
+     (use-package slime-company :ensure t
+       :config (setq slime-contribs (cons 'slime-company slime-contribs)))
+   #+END_SRC
+
+   If you're using ~gerbil-mode~ as you should, add the hook.
+
+   #+begin_src shell
+     cd ~/.emacs.d/ && git clone -n --depth 1 https://github.com/vyzo/gerbil.git
+     cd gerbil && git checkout HEAD etc/gerbil.el
+     git mv etc/gerbil.el . && rmdir etc
+   #+end_src
+
+   #+BEGIN_SRC emacs-lisp
+     (add-to-list 'load-path "~/.emacs.d/gerbil")
+     (require 'gerbil)
+     (add-hook 'gerbil-mode-hook 'slime-mode)
+   #+end_src
+
+
+   In a shell, open a swank server.
+
+   #+begin_src shell
+     gxi -e "(import :drewc/r7rs/gerbil-swank)" -e "(start-swank 4006)"
+   #+end_src
+
+   In emacs, ~M-x slime-connect~, ~localhost~, ~4006~, and BAM! We've got a *REPL*!
+
+   Even better, we can now run source blocks through it. Try this out. Here's a
+   gerbil code block. In emacs, enter it using ~org-edit-src-code(C-c ')~.
+
+   #+begin_src gerbil 
+     (import :drewc/js-syntax :drewc/smug :std/test)
+
+     (def test-tokens (lexify "foo + 42"))
+
+     (def test-syntax-struct (run AssignmentExpression test-tokens))
+
+     (check-predicate test-syntax-struct additive-expression?)
+     (check-predicate test-syntax-struct operator?)
+
+     (check-predicate (operator-lhs test-syntax-struct) identifier-reference?)
+
+     (check (identifier-reference-name (operator-lhs test-syntax-struct))
+            => "foo")
+
+     (check (operator-op test-syntax-struct)  => "+")
+   #+end_src
+   
+** TODO Untangle
