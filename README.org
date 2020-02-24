@@ -79,7 +79,7 @@ usually named after the .ss file they are "tangling".
    that. Emacs has great support for such things. As a former Common Lisp
    addict, [[https://common-lisp.net/project/slime/doc/html/][*SLIME*]] and *SWANK* are a wonderful way to use an *inferior lisp*.
 
-   First, install the ~github.com/ecraven/r7rs-swank~ package.
+   First, install the ~github.com/drewc/drewc-r7rs-swank~ package.
 
    #+begin_src shell
      gxpkg install github.com/drewc/drewc-r7rs-swank
